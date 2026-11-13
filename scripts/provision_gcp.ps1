@@ -174,7 +174,10 @@ if ($services -contains 'propertypost') {
     Invoke-Gcloud @('run', 'services', 'add-iam-policy-binding', 'propertypost',
         "--region=$Region", "--project=$ProjectId", "--member=serviceAccount:$deployerEmail",
         '--role=roles/run.developer') | Out-Null
-    Write-Output 'Cloud Run Developer granted on the PropertyPost service only.'
+    Invoke-Gcloud @('run', 'services', 'add-iam-policy-binding', 'propertypost',
+        "--region=$Region", "--project=$ProjectId", "--member=serviceAccount:$deployerEmail",
+        '--role=roles/run.invoker') | Out-Null
+    Write-Output 'Cloud Run Developer and Invoker granted on the PropertyPost service only.'
 } else {
     Write-Output 'Cloud Run service permission deferred until the PropertyPost service exists.'
 }

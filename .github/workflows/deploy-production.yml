@@ -1,0 +1,101 @@
+name: Deploy PropertyPost to Cloud Run
+
+on:
+  workflow_run:
+    workflows: [Manual CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: propertypost-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    name: Deploy verified main revision
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+      SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+      PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      DEPLOYER: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+      RUNTIME_SA: propertypost-runtime@praxis-citron-469206-c8.iam.gserviceaccount.com
+      BUCKET: propertypost-private-105269730029
+      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPOSITORY }}/propertypost:${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Check out the exact CI commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Authenticate with GitHub OIDC
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Install Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Build and push immutable commit image
+        run: |
+          docker build --tag "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy without shifting production traffic
+        id: deploy
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --image="$IMAGE" \
+            --service-account="$RUNTIME_SA" \
+            --min=0 \
+            --max=2 \
+            --cpu=1 \
+            --memory=512Mi \
+            --timeout=60s \
+            --concurrency=20 \
+            --no-allow-unauthenticated \
+            --no-traffic \
+            --tag="verify-${COMMIT_SHA::12}" \
+            --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FIRESTORE_DATABASE=(default),GCS_PRIVATE_BUCKET=$BUCKET,FIREBASE_PROJECT_ID=$PROJECT_ID,CAPTION_ADAPTER=local" \
+            --set-secrets="DJANGO_SECRET_KEY=propertypost-django-secret-key:latest,AUTOMATION_HMAC_SECRET=propertypost-automation-hmac-secret:latest,FIREBASE_WEB_API_KEY=propertypost-firebase-web-api-key:latest,GEMINI_API_KEY=propertypost-gemini-api-key:latest"
+
+          SERVICE_URL="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)')"
+          SERVICE_HOST="${SERVICE_URL#https://}"
+          VERIFY_URL="https://verify-${COMMIT_SHA::12}---${SERVICE_HOST}"
+          echo "verify_url=$VERIFY_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Verify candidate revision health
+        run: |
+          SERVICE_URL="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)')"
+          ID_TOKEN="$(gcloud auth print-identity-token --audiences="$SERVICE_URL")"
+          for path in /health/ /ready/; do
+            curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 5 \
+              --header "Authorization: Bearer $ID_TOKEN" \
+              "${{ steps.deploy.outputs.verify_url }}$path"
+          done
+
+      - name: Send production traffic to verified revision
+        run: |
+          REVISION="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format='value(status.latestCreatedRevisionName)')"
+          test -n "$REVISION"
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="$REVISION=100"
