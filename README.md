@@ -44,6 +44,8 @@ details, Advert preview, and Published result. Photos are stored in ignored loca
 Each broker route filters by the signed-in owner, including uploads and publication.
 Cloud configuration and private storage setup are in
 [`docs/google-cloud-setup.md`](docs/google-cloud-setup.md).
+The approved, repeatable Google Cloud provisioning and GitHub OIDC setup are in
+[`docs/google-cloud-provisioning.md`](docs/google-cloud-provisioning.md).
 Poster layouts, caption providers, and the approval flow are described in
 [`docs/advert-generation.md`](docs/advert-generation.md).
 The versioned, signed automation API contract is in

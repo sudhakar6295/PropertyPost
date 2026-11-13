@@ -3,6 +3,7 @@
 .env
 .env.*
 !.env.example
+gha-creds-*.json
 __pycache__
 *.pyc
 .pytest_cache
