@@ -1,0 +1,1 @@
+"""PropertyPost Django project."""

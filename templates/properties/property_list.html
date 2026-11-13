@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Open Plots for Sale | PropertyPost{% endblock %}
+
+{% block content %}
+  <section class="hero py-5 mb-4">
+    <div class="container py-4">
+      <div class="col-lg-7">
+        <p class="text-uppercase fw-semibold text-primary mb-2">Open Plot / Land for Sale</p>
+        <h1 class="display-5 fw-bold">Find land for your next chapter.</h1>
+        <p class="lead text-secondary mb-0">
+          Clear plot details, transparent pricing, and privacy built in from day one.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="container pb-5" aria-labelledby="available-properties">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+      <h2 class="h3 mb-0" id="available-properties">Available open plots</h2>
+      <span class="badge text-bg-primary rounded-pill">{{ properties|length }} listed</span>
+    </div>
+    <div class="row g-4">
+      {% for property in properties %}
+        <div class="col-md-6 col-xl-4">
+          <article class="card h-100 border-0 shadow-sm">
+            <div class="card-body p-4">
+              <span class="badge text-bg-light border mb-3">{{ property.approval_type|upper }}</span>
+              <h3 class="h5 card-title">{{ property.title }}</h3>
+              <p class="text-secondary mb-3">{{ property.location }} · {{ property.landmark }}</p>
+              <dl class="row small mb-0">
+                <dt class="col-6">Area</dt>
+                <dd class="col-6 text-end">{{ property.area }} {{ property.area_unit }}</dd>
+                <dt class="col-6">Facing</dt>
+                <dd class="col-6 text-end">{{ property.facing|title }}</dd>
+                <dt class="col-6">Road width</dt>
+                <dd class="col-6 text-end">{{ property.road_width_ft }} ft</dd>
+              </dl>
+            </div>
+            <div class="card-footer bg-white border-0 px-4 pb-4">
+              <strong class="fs-5">₹{{ property.total_price }}</strong>
+              {% if property.price_per_unit %}
+                <span class="text-secondary small d-block">₹{{ property.price_per_unit }} per unit</span>
+              {% endif %}
+              <a class="btn btn-outline-primary btn-sm mt-3" href="tel:{{ property.contact_number }}">
+                Contact seller
+              </a>
+            </div>
+          </article>
+        </div>
+      {% empty %}
+        <div class="col-12">
+          <div class="bg-white border rounded-3 p-5 text-center">
+            <h3 class="h5">No open plots published yet</h3>
+            <p class="text-secondary mb-0">Fresh land listings will appear here soon.</p>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

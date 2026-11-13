@@ -1,0 +1,19 @@
+:root {
+  --propertypost-ink: #16243a;
+}
+
+body {
+  color: var(--propertypost-ink);
+}
+
+.hero {
+  background: linear-gradient(135deg, #eef5ff 0%, #f8fbff 55%, #eefcf6 100%);
+}
+
+.card {
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+}
