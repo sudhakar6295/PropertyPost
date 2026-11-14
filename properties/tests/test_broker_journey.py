@@ -1,13 +1,16 @@
 """Complete local broker flow and cross-broker access checks."""
 
 from io import BytesIO
+from unittest.mock import patch
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import OperationalError
 from django.urls import reverse
 from PIL import Image
 
 from properties.models import OpenPlotListing
+from propertypost.logging import SafeJsonFormatter
 
 
 @pytest.mark.django_db
@@ -117,3 +120,43 @@ def test_other_broker_cannot_access_any_plot_step(client, django_user_model):
     assert client.post(reverse("publish-plot", args=[plot.public_id])).status_code == 404
     assert client.post(reverse("arrange-photos", args=[plot.public_id])).status_code == 404
     assert b"Alice&#x27;s plot" not in client.get(reverse("dashboard")).content
+
+
+@pytest.mark.django_db
+def test_plot_database_error_is_safe_and_preserves_form_values(client, django_user_model, caplog):
+    django_user_model.objects.create_user(username="alice", password="StrongPass123!")
+    client.login(username="alice", password="StrongPass123!")
+    data = {
+        "public-title": "East-facing plot",
+        "public-location": "Hyderabad",
+        "public-landmark": "Near ORR",
+        "public-area": "267.00",
+        "public-area_unit": "sq_yd",
+        "public-total_price": "4800000",
+        "public-price_per_unit": "17977.53",
+        "public-facing": "east",
+        "public-road_width_ft": "30.00",
+        "public-approval_type": "hmda",
+        "public-contact_number": "+919876543210",
+        "public-language": "te",
+        "private-owner_name": "Owner Alice",
+        "private-owner_phone": "+919800000000",
+        "private-internal_notes": "Never put this in logs",
+        "private-negotiable_amount": "4500000",
+    }
+    with patch(
+        "properties.broker_views.OpenPlotListing.save",
+        side_effect=OperationalError("private sql error"),
+    ):
+        response = client.post(reverse("add-plot"), data)
+
+    assert response.status_code == 503
+    assert b"We couldn't save this plot just now" in response.content
+    assert b"East-facing plot" in response.content
+    assert b"Never put this in logs" not in caplog.text
+    assert "private sql error" not in caplog.text
+    record = next(record for record in caplog.records if record.msg == "Plot save failed")
+    safe_log = SafeJsonFormatter().format(record)
+    assert '"exception_type": "OperationalError"' in safe_log
+    assert "private sql error" not in safe_log
+    assert "Never put this in logs" not in safe_log

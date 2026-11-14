@@ -1,12 +1,13 @@
 """Authenticated, ownership scoped broker journey."""
 
+import logging
 from pathlib import Path
 from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -18,6 +19,8 @@ from .posters import render_poster
 from .repositories.django import _to_public_domain
 from .serializers import serialize_public_details
 from .services import object_store
+
+logger = logging.getLogger(__name__)
 
 
 def broker_login(request):
@@ -64,18 +67,35 @@ def save_plot(request, plot=None):
                 "negotiable_amount", "This must be no more than the total price."
             )
     if request.method == "POST" and public_form.is_valid() and private_form.is_valid():
-        with transaction.atomic():
-            listing = public_form.save(commit=False)
-            listing.broker = request.user
-            if plot and listing.status != OpenPlotListing.Status.DRAFT:
-                listing.status = OpenPlotListing.Status.DRAFT
-            listing.save()
-            details = private_form.save(commit=False)
-            details.listing = listing
-            details.full_clean()
-            details.save()
-            if plot:
-                AdvertDraft.objects.filter(listing=listing).delete()
+        try:
+            with transaction.atomic():
+                listing = public_form.save(commit=False)
+                listing.broker = request.user
+                if plot and listing.status != OpenPlotListing.Status.DRAFT:
+                    listing.status = OpenPlotListing.Status.DRAFT
+                listing.save()
+                details = private_form.save(commit=False)
+                details.listing = listing
+                details.full_clean()
+                details.save()
+                if plot:
+                    AdvertDraft.objects.filter(listing=listing).delete()
+        except DatabaseError as exc:
+            logger.error(
+                "Plot save failed",
+                extra={"event": "plot_save_failed", "exception_type": type(exc).__name__},
+            )
+            public_form.add_error(
+                None,
+                "We couldn't save this plot just now. Your details are still on this page; "
+                "please try again shortly.",
+            )
+            return render(
+                request,
+                "properties/plot_form.html",
+                {"plot": plot, "public_form": public_form, "private_form": private_form},
+                status=503,
+            )
         return redirect("upload-photos", public_id=listing.public_id)
     return render(
         request,
