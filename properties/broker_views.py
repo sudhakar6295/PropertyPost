@@ -239,6 +239,11 @@ def generate_advert(request, public_id):
             form.add_error(None, "This advert is already being created. Please wait.")
         elif plot.status in {OpenPlotListing.Status.PUBLISHING, OpenPlotListing.Status.PUBLISHED}:
             return HttpResponseBadRequest("Publishing or published adverts cannot be regenerated.")
+        elif not make_enabled and not settings.DEBUG:
+            form.add_error(
+                None,
+                "Posting automation is not configured. Please contact your administrator.",
+            )
         elif make_enabled:
             request_id = uuid4()
             plot.status = OpenPlotListing.Status.GENERATING

@@ -186,6 +186,36 @@ def test_create_posting_sends_make_event_once_and_marks_generation_pending(
 
 
 @pytest.mark.django_db
+def test_production_without_make_configuration_fails_closed(client, django_user_model, settings):
+    from properties.models import PlotPhoto
+    from properties.tests.test_views import create_listing
+
+    settings.DEBUG = False
+    settings.MAKE_WEBHOOK_URL = ""
+    broker = django_user_model.objects.create_user(username="alice", password="StrongPass123!")
+    client.force_login(broker)
+    plot = create_listing("Production listing", OpenPlotListing.Status.DRAFT, broker)
+    PlotPhoto.objects.create(
+        listing=plot,
+        object_path=f"originals/{broker.pk}/{plot.public_id}/photo.jpg",
+        content_type="image/jpeg",
+        size_bytes=123,
+        is_main=True,
+    )
+
+    with patch("properties.broker_views.render_poster") as render_poster:
+        response = client.post(
+            reverse("generate-advert", args=[plot.public_id]), {"template": "classic"}
+        )
+
+    assert response.status_code == 200
+    assert b"Posting automation is not configured" in response.content
+    render_poster.assert_not_called()
+    plot.refresh_from_db()
+    assert plot.status == OpenPlotListing.Status.DRAFT
+
+
+@pytest.mark.django_db
 def test_plot_database_error_is_safe_and_preserves_form_values(client, django_user_model, caplog):
     django_user_model.objects.create_user(username="alice", password="StrongPass123!")
     client.login(username="alice", password="StrongPass123!")

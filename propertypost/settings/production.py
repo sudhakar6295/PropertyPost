@@ -30,7 +30,8 @@ AUTOMATION_HMAC_SECRET = required_env("AUTOMATION_HMAC_SECRET")
 GCS_PRIVATE_BUCKET = required_env("GCS_PRIVATE_BUCKET")
 GOOGLE_CLOUD_PROJECT = required_env("GOOGLE_CLOUD_PROJECT")
 SECRET_KEY = required_env("DJANGO_SECRET_KEY")
-MAKE_WEBHOOK_URL = required_env("MAKE_WEBHOOK_URL")
+# Management jobs such as migrations do not need the automation credential.
+MAKE_WEBHOOK_URL = os.environ.get("MAKE_WEBHOOK_URL", "").strip()
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
