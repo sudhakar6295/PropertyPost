@@ -1,12 +1,10 @@
 """Authenticated, ownership scoped broker journey."""
 
-from datetime import timedelta
 from pathlib import Path
-from time import time
 from uuid import uuid4
 
 from django.conf import settings
-from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest
@@ -27,66 +25,22 @@ def broker_login(request):
         return redirect("dashboard")
     error = None
     if request.method == "POST":
-        if settings.AUTH_ADAPTER == "local":
-            user = authenticate(
-                request,
-                username=request.POST.get("username"),
-                password=request.POST.get("password"),
-            )
-            if user is not None and user.is_active:
-                login(request, user)
-                return redirect("dashboard")
-            error = "Those sign-in details did not match. Please try again."
-        else:
-            from firebase_admin import auth, get_app, initialize_app
-
-            try:
-                get_app()
-            except ValueError:
-                initialize_app(options={"projectId": settings.FIREBASE_PROJECT_ID})
-            token = request.POST.get("id_token", "")
-            try:
-                claims = auth.verify_id_token(token, check_revoked=True)
-                if time() - claims["auth_time"] > 300:
-                    raise ValueError("Recent sign-in required")
-                cookie = auth.create_session_cookie(token, expires_in=timedelta(days=5))
-            except (ValueError, auth.InvalidIdTokenError, auth.RevokedIdTokenError):
-                error = "Please sign in again."
-            else:
-                user, _ = get_user_model().objects.get_or_create(
-                    username=f"firebase:{claims['uid']}",
-                    defaults={"is_active": True},
-                )
-                user.set_unusable_password()
-                user.save(update_fields=["password"])
-                login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-                response = redirect("dashboard")
-                response.set_cookie(
-                    "firebase_session",
-                    cookie,
-                    max_age=432000,
-                    httponly=True,
-                    secure=True,
-                    samesite="Lax",
-                )
-                return response
-    return render(
-        request,
-        "properties/login.html",
-        {
-            "error": error,
-            "firebase_api_key": getattr(settings, "FIREBASE_WEB_API_KEY", ""),
-            "firebase_project_id": getattr(settings, "FIREBASE_PROJECT_ID", ""),
-        },
-    )
+        user = authenticate(
+            request,
+            username=request.POST.get("username"),
+            password=request.POST.get("password"),
+        )
+        if user is not None and user.is_active:
+            login(request, user)
+            return redirect("dashboard")
+        error = "Those sign-in details did not match. Please try again."
+    return render(request, "properties/login.html", {"error": error})
 
 
 @require_POST
 def broker_logout(request):
     logout(request)
-    response = redirect("broker-login")
-    response.delete_cookie("firebase_session")
-    return response
+    return redirect("broker-login")
 
 
 def owned_plot(request, public_id):

@@ -22,7 +22,6 @@ STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
-AUTH_ADAPTER = "firebase"
 OBJECT_ADAPTER = "google"
 CAPTION_ADAPTER = os.environ.get("CAPTION_ADAPTER", "local")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
@@ -30,8 +29,6 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
 AUTOMATION_HMAC_SECRET = required_env("AUTOMATION_HMAC_SECRET")
 GCS_PRIVATE_BUCKET = required_env("GCS_PRIVATE_BUCKET")
 GOOGLE_CLOUD_PROJECT = required_env("GOOGLE_CLOUD_PROJECT")
-FIREBASE_PROJECT_ID = required_env("FIREBASE_PROJECT_ID")
-FIREBASE_WEB_API_KEY = required_env("FIREBASE_WEB_API_KEY")
 SECRET_KEY = required_env("DJANGO_SECRET_KEY")
 DATABASES = {
     "default": {

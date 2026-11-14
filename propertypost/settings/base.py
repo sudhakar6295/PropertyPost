@@ -21,7 +21,6 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "propertypost.auth_middleware.FirebaseSessionMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -66,7 +65,6 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "broker-login"
-AUTH_ADAPTER = "local"
 OBJECT_ADAPTER = "local"
 CAPTION_ADAPTER = "local"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024

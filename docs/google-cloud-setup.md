@@ -1,6 +1,6 @@
 # Google Cloud and Hostinger setup
 
-PropertyPost production runs Django on Cloud Run, stores original photographs and generated posters in a private Google Cloud Storage bucket, authenticates brokers with Firebase Authentication, and connects to a separate Hostinger MySQL database. It does not use Firestore, PostgreSQL or Cloud SQL.
+PropertyPost production runs Django on Cloud Run, stores original photographs and generated posters in a private Google Cloud Storage bucket, uses Django authentication, and connects to a separate Hostinger MySQL database. It does not use Firestore, PostgreSQL or Cloud SQL.
 
 ## Database credentials
 
@@ -11,7 +11,7 @@ Create these Secret Manager secrets in the Google Cloud project and add values o
 - `propertypost-mysql-user`
 - `propertypost-mysql-password`
 
-Store `DJANGO_SECRET_KEY`, `AUTOMATION_HMAC_SECRET`, and `FIREBASE_WEB_API_KEY` in their named Secret Manager secrets too. The deployment workflow attaches secret versions to Cloud Run as environment variables. Configure the Hostinger service to accept connections from Cloud Run and require TLS. If a custom certificate authority is required, mount a trusted CA certificate into the container and set `MYSQL_SSL_CA` to its path. Do not put these values in GitHub, source files, Docker build arguments, or the image.
+Store `DJANGO_SECRET_KEY` and `AUTOMATION_HMAC_SECRET` in their named Secret Manager secrets too. The deployment workflow attaches secret versions to Cloud Run as environment variables. Configure the Hostinger service to accept connections from Cloud Run and require TLS. If a custom certificate authority is required, mount a trusted CA certificate into the container and set `MYSQL_SSL_CA` to its path. Do not put these values in GitHub, source files, Docker build arguments, or the image.
 
 The database must be separately backed up and sized. Keep all infrastructure spending below ₹2,000/month; verify the existing Hostinger plan and Cloud costs before deployment. This repository does not contact Hostinger or run production migrations.
 

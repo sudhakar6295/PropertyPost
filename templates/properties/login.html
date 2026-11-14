@@ -3,19 +3,8 @@
 {% block content %}<div class="container py-5"><div class="row justify-content-center"><div class="col-12 col-md-7 col-lg-5">
 <div class="card border-0 shadow-sm"><div class="card-body p-4 p-md-5"><h1 class="h3 mb-2">Welcome back</h1><p class="text-secondary">Sign in to manage your plot adverts.</p>
 {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
-<form method="post" id="login-form">{% csrf_token %}
-{% if firebase_api_key %}<div class="mb-3"><label class="form-label" for="username">Email</label><input class="form-control" id="username" type="email" autocomplete="username" required></div><input type="hidden" name="id_token" id="id-token">
-{% else %}<div class="mb-3"><label class="form-label" for="username">Username</label><input class="form-control" id="username" name="username" autocomplete="username" required></div>{% endif %}
-<div class="mb-4"><label class="form-label" for="password">Password</label><input class="form-control" id="password" {% if not firebase_api_key %}name="password"{% endif %} type="password" autocomplete="current-password" required></div>
+<form method="post">{% csrf_token %}
+<div class="mb-3"><label class="form-label" for="username">Username</label><input class="form-control" id="username" name="username" autocomplete="username" required></div>
+<div class="mb-4"><label class="form-label" for="password">Password</label><input class="form-control" id="password" name="password" type="password" autocomplete="current-password" required></div>
 <button class="btn btn-primary w-100" type="submit">Sign in</button></form></div></div></div></div></div>
-{% if firebase_api_key %}<script type="module">
-import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
-import {getAuth, signInWithEmailAndPassword} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-const app = initializeApp({apiKey: '{{ firebase_api_key|escapejs }}', authDomain: '{{ firebase_project_id|escapejs }}.firebaseapp.com', projectId: '{{ firebase_project_id|escapejs }}'});
-const auth = getAuth(app); const form = document.getElementById('login-form');
-form.addEventListener('submit', async event => {if (document.getElementById('id-token').value) return; event.preventDefault();
-try {const result = await signInWithEmailAndPassword(auth, document.getElementById('username').value, document.getElementById('password').value);
-document.getElementById('id-token').value = await result.user.getIdToken(); form.submit();}
-catch {alert('Please check your sign-in details and try again.');}});
-</script>{% endif %}
 {% endblock %}

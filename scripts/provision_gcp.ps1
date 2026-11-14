@@ -31,7 +31,6 @@ $secretNames = @(
     'propertypost-mysql-database',
     'propertypost-mysql-user',
     'propertypost-mysql-password',
-    'propertypost-firebase-web-api-key',
     'propertypost-gemini-api-key'
 )
 $providerName = "projects/$ProjectNumber/locations/global/workloadIdentityPools/$pool/providers/$provider"

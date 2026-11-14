@@ -77,9 +77,9 @@ The MySQL schema boundary is in [`docs/data-model.md`](docs/data-model.md), and 
 versioned, signed automation API contract is in
 [`docs/automation-api.md`](docs/automation-api.md).
 
-Local development uses Django password authentication. Production settings use Firebase
-email/password sign-in, verified ID tokens, and revocation-checked server session cookies.
-Firebase credentials come from the runtime environment.
+Local and production login both use Django username/password authentication and Django
+sessions stored in the configured MySQL database. Create broker accounts through Django's
+superuser/admin tooling; no external authentication provider is required.
 
 ## Quality checks
 
