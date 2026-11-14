@@ -214,7 +214,8 @@ def test_plot_database_error_is_safe_and_preserves_form_values(client, django_us
         response = client.post(reverse("add-plot"), data)
 
     assert response.status_code == 503
-    assert b"We couldn't save this plot just now" in response.content
+    # Django escapes apostrophes when rendering the form's non-field error list.
+    assert b"We couldn&#x27;t save this plot just now" in response.content
     assert b"East-facing plot" in response.content
     assert b"Never put this in logs" not in caplog.text
     assert "private sql error" not in caplog.text
