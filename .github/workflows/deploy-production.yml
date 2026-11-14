@@ -59,6 +59,23 @@ jobs:
           docker build --tag "$IMAGE" .
           docker push "$IMAGE"
 
+      - name: Apply production database migrations
+        run: |
+          gcloud run jobs deploy propertypost-migrate \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --image="$IMAGE" \
+            --service-account="$RUNTIME_SA" \
+            --tasks=1 \
+            --max-retries=0 \
+            --task-timeout=300s \
+            --command=uv \
+            --args="^:^run:--no-sync:manage.py:migrate:--noinput" \
+            --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCS_PRIVATE_BUCKET=$BUCKET,CAPTION_ADAPTER=local,MYSQL_PORT=3306,MYSQL_SSL_ENABLED=true,DJANGO_ALLOWED_HOSTS=.run.app,DJANGO_CSRF_TRUSTED_ORIGINS=https://*.run.app" \
+            --set-secrets="DJANGO_SECRET_KEY=propertypost-django-secret-key:latest,AUTOMATION_HMAC_SECRET=propertypost-automation-hmac-secret:latest,MYSQL_HOST=propertypost-mysql-host:latest,MYSQL_DATABASE=propertypost-mysql-database:latest,MYSQL_USER=propertypost-mysql-user:latest,MYSQL_PASSWORD=propertypost-mysql-password:latest" \
+            --execute-now \
+            --wait
+
       - name: Deploy without shifting production traffic
         id: deploy
         run: |
