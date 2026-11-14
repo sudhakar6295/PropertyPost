@@ -10,10 +10,12 @@ from django.contrib.auth.decorators import login_required
 from django.db import DatabaseError, transaction
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from .captions import GeminiCaptionProvider, LocalCaptionProvider
 from .forms import AdvertEditForm, GenerateForm, PhotoForm, PlotForm, PrivateDetailsForm
+from .make_webhook import MakeWebhookError, trigger_generation
 from .models import AdvertDraft, OpenPlotListing, OpenPlotPrivateDetails, PlotPhoto
 from .posters import render_poster
 from .repositories.django import _to_public_domain
@@ -218,14 +220,69 @@ def review_details(request, public_id):
 @login_required
 def generate_advert(request, public_id):
     plot = owned_plot(request, public_id)
+    if (
+        settings.MAKE_WEBHOOK_URL
+        and plot.status == OpenPlotListing.Status.REVIEW
+        and hasattr(plot, "advert")
+    ):
+        return redirect("review-details", public_id=public_id)
     form = GenerateForm(request.POST or None, request.FILES or None)
     has_main_photo = plot.photos.filter(is_main=True).exists()
+    make_enabled = bool(settings.MAKE_WEBHOOK_URL)
+    if make_enabled:
+        form.fields.pop("logo", None)
     if request.method == "POST" and form.is_valid():
         photo = plot.photos.filter(is_main=True).first()
         if photo is None:
             form.add_error(None, "Choose a main photo first.")
+        elif plot.status == OpenPlotListing.Status.GENERATING:
+            form.add_error(None, "This advert is already being created. Please wait.")
         elif plot.status in {OpenPlotListing.Status.PUBLISHING, OpenPlotListing.Status.PUBLISHED}:
             return HttpResponseBadRequest("Publishing or published adverts cannot be regenerated.")
+        elif make_enabled:
+            request_id = uuid4()
+            plot.status = OpenPlotListing.Status.GENERATING
+            plot.save(update_fields=["status", "updated_at"])
+            try:
+                trigger_generation(
+                    settings.MAKE_WEBHOOK_URL,
+                    listing_id=str(plot.public_id),
+                    request_id=str(request_id),
+                    template=form.cleaned_data["template"],
+                    automation_input_url=request.build_absolute_uri(
+                        reverse("automation-input", args=[plot.public_id])
+                    ),
+                    generation_result_url=request.build_absolute_uri(
+                        reverse("generation-result", args=[plot.public_id])
+                    ),
+                )
+            except MakeWebhookError as exc:
+                logger.error(
+                    "Make generation trigger failed",
+                    extra={
+                        "event": "make_generation_trigger_failed",
+                        "exception_type": type(exc).__name__,
+                    },
+                )
+                plot.refresh_from_db(fields=["status"])
+                if plot.status == OpenPlotListing.Status.GENERATING:
+                    plot.status = OpenPlotListing.Status.FAILED
+                    plot.save(update_fields=["status", "updated_at"])
+                form.add_error(None, "Could not send the advert request. Please try again.")
+            else:
+                return render(
+                    request,
+                    "properties/generate.html",
+                    {
+                        "plot": plot,
+                        "form": form,
+                        "has_main_photo": has_main_photo,
+                        "make_enabled": make_enabled,
+                        "request_sent": True,
+                        "request_pending": True,
+                    },
+                    status=202,
+                )
         else:
             plot.status = OpenPlotListing.Status.GENERATING
             plot.save(update_fields=["status", "updated_at"])
@@ -271,6 +328,8 @@ def generate_advert(request, public_id):
             "plot": plot,
             "form": form,
             "has_main_photo": has_main_photo,
+            "make_enabled": make_enabled,
+            "request_pending": plot.status == OpenPlotListing.Status.GENERATING,
         },
     )
 

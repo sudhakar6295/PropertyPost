@@ -1,8 +1,13 @@
 # Automation API v1
 
-These endpoints are reserved for future automation. No Make.com or Facebook connection
-is configured. Set `AUTOMATION_HMAC_SECRET` to an independent random secret in the runtime
-environment. Without it, the API returns 401.
+The broker's **Create posting** button sends a small generation event to the configured
+Make.com webhook. It contains the listing UUID, a request UUID, selected template, and
+PropertyPost API URLs, but no property fields, photos, or private details. Make fetches the
+listing separately from the signed automation-input endpoint.
+
+Set `MAKE_WEBHOOK_URL` from Secret Manager secret `propertypost-make-webhook-url`. Set
+`AUTOMATION_HMAC_SECRET` to the same independent secret in PropertyPost and Make's secure
+connection so Make can sign input and callback requests. Without it, the API returns 401.
 
 Every request sends `X-PropertyPost-Timestamp` (Unix seconds) and
 `X-PropertyPost-Signature` (lowercase hex HMAC-SHA256). Sign the exact bytes:
@@ -24,7 +29,7 @@ Successful response (200):
 ```json
 {
   "id": "2ed678c5-8b94-41d3-a803-2ffddb0cb485",
-  "status": "approved",
+  "status": "generating",
   "public_details": {
     "title": "East-facing plot",
     "location": "Shamshabad, Hyderabad",
@@ -51,8 +56,27 @@ Successful response (200):
 ```
 
 Image URLs expire after five minutes. They stream private objects through PropertyPost
-and contain no storage credentials. Only approved public fields are returned. The URL
+and contain no storage credentials. The endpoint returns data only while a broker-triggered
+generation request is pending. The URL
 above illustrates the shape; its example signature is not valid.
+
+The website sends this event to Make when the broker creates a posting:
+
+```json
+{
+  "event": "propertypost.generation.requested",
+  "request_id": "ac1736c9-4d43-479a-b9bb-fbb7bf5595a1",
+  "listing_id": "2ed678c5-8b94-41d3-a803-2ffddb0cb485",
+  "template": "classic",
+  "automation_input_url": "https://propertypost.example.com/api/v1/listings/2ed678c5-8b94-41d3-a803-2ffddb0cb485/automation-input/",
+  "generation_result_url": "https://propertypost.example.com/api/v1/listings/2ed678c5-8b94-41d3-a803-2ffddb0cb485/generation-result/"
+}
+```
+
+Use the same `request_id` in the generation callback. PropertyPost sets the listing to
+`generating` before calling Make; repeated clicks while that request is pending do not
+send another event. A successful callback moves it to `review` for broker editing and
+approval. This event requests generation only; it does not publish to Facebook.
 
 ## POST `/api/v1/listings/{id}/generation-result/`
 

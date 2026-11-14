@@ -11,7 +11,7 @@ Create these Secret Manager secrets in the Google Cloud project and add values o
 - `propertypost-mysql-user`
 - `propertypost-mysql-password`
 
-Store `DJANGO_SECRET_KEY` and `AUTOMATION_HMAC_SECRET` in their named Secret Manager secrets too. The deployment workflow attaches secret versions to Cloud Run as environment variables. Configure the Hostinger service to accept connections from Cloud Run and require TLS. If a custom certificate authority is required, mount a trusted CA certificate into the container and set `MYSQL_SSL_CA` to its path. Do not put these values in GitHub, source files, Docker build arguments, or the image.
+Store `DJANGO_SECRET_KEY`, `AUTOMATION_HMAC_SECRET`, and the Make custom webhook URL in their named Secret Manager secrets (`propertypost-django-secret-key`, `propertypost-automation-hmac-secret`, and `propertypost-make-webhook-url`). The deployment workflow attaches secret versions to Cloud Run as environment variables. Configure the Hostinger service to accept connections from Cloud Run and require TLS. If a custom certificate authority is required, mount a trusted CA certificate into the container and set `MYSQL_SSL_CA` to its path. Do not put these values in GitHub, source files, Docker build arguments, or the image.
 
 The database must be separately backed up and sized. Keep all infrastructure spending below ₹2,000/month; verify the existing Hostinger plan and Cloud costs before deployment. This repository does not contact Hostinger or run production migrations.
 

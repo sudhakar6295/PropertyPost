@@ -139,6 +139,53 @@ def test_generation_without_main_photo_explains_how_to_continue(client, django_u
 
 
 @pytest.mark.django_db
+def test_create_posting_sends_make_event_once_and_marks_generation_pending(
+    client, django_user_model, settings
+):
+    from properties.models import OpenPlotPrivateDetails, PlotPhoto
+    from properties.tests.test_views import create_listing
+
+    settings.MAKE_WEBHOOK_URL = "https://hook.example.invalid/secret-token"
+    broker = django_user_model.objects.create_user(username="alice", password="StrongPass123!")
+    client.force_login(broker)
+    plot = create_listing("Make test listing", OpenPlotListing.Status.DRAFT, broker)
+    OpenPlotPrivateDetails.objects.create(
+        listing=plot,
+        owner_name="Private owner",
+        owner_phone="+919800000000",
+        internal_notes="Confidential broker notes",
+    )
+    PlotPhoto.objects.create(
+        listing=plot,
+        object_path=f"originals/{broker.pk}/{plot.public_id}/photo.jpg",
+        content_type="image/jpeg",
+        size_bytes=123,
+        is_main=True,
+    )
+
+    with patch("properties.broker_views.trigger_generation") as trigger:
+        response = client.post(
+            reverse("generate-advert", args=[plot.public_id]), {"template": "classic"}
+        )
+        assert response.status_code == 202
+        assert b"Your request was sent to Make.com" in response.content
+        assert b"Confidential broker notes" not in response.content
+        repeated = client.post(
+            reverse("generate-advert", args=[plot.public_id]), {"template": "classic"}
+        )
+        assert repeated.status_code == 200
+
+    assert trigger.call_count == 1
+    event = trigger.call_args.kwargs
+    assert event["listing_id"] == str(plot.public_id)
+    assert event["template"] == "classic"
+    assert "automation_input_url" in event
+    assert "generation_result_url" in event
+    plot.refresh_from_db()
+    assert plot.status == OpenPlotListing.Status.GENERATING
+
+
+@pytest.mark.django_db
 def test_plot_database_error_is_safe_and_preserves_form_values(client, django_user_model, caplog):
     django_user_model.objects.create_user(username="alice", password="StrongPass123!")
     client.login(username="alice", password="StrongPass123!")

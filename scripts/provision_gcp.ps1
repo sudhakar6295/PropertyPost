@@ -31,7 +31,8 @@ $secretNames = @(
     'propertypost-mysql-database',
     'propertypost-mysql-user',
     'propertypost-mysql-password',
-    'propertypost-gemini-api-key'
+    'propertypost-gemini-api-key',
+    'propertypost-make-webhook-url'
 )
 $providerName = "projects/$ProjectNumber/locations/global/workloadIdentityPools/$pool/providers/$provider"
 $principal = "principalSet://iam.googleapis.com/projects/$ProjectNumber/locations/global/workloadIdentityPools/$pool/attribute.repository/$GitHubRepository"

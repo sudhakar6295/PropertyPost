@@ -25,7 +25,8 @@
   and never discard or overwrite user work without explicit approval.
 - Keep total infrastructure cost below ₹2,000 per month. Document estimated recurring cost
   before introducing infrastructure or paid services.
-- Make.com integration is intentionally deferred to a later stage. Do not add Make.com
-  webhooks, credentials, dependencies, or workflows yet.
+- Make.com is connected only through the configured, secret-backed webhook and versioned
+  API. Keep private listing data out of webhook events. Do not add Facebook publishing
+  until the broker approval and publication callback flow is explicitly implemented.
 - Do not create `requirements.txt`; `pyproject.toml` and `uv.lock` are the dependency source
   of truth unless a verified deployment target genuinely requires a requirements export.

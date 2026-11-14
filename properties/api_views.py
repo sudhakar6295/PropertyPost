@@ -58,6 +58,8 @@ def automation_input(request, public_id):
     listing = get_object_or_404(OpenPlotListing, public_id=public_id)
     if listing.broker_id is None:
         return _error("Listing has no owner", 403)
+    if listing.status != OpenPlotListing.Status.GENERATING:
+        return _error("Listing is not awaiting generation", 409)
     expires = int(time.time()) + settings.AUTOMATION_IMAGE_TTL_SECONDS
     images = []
     for photo in listing.photos.all():

@@ -11,7 +11,7 @@ In the repository's GitHub **production environment**, configure these variables
 - `GCP_WORKLOAD_IDENTITY_PROVIDER`
 - `GCP_DEPLOY_SERVICE_ACCOUNT`
 
-There are no GitHub secrets for Google or MySQL. GitHub receives no long-lived cloud credential or database password. Runtime secrets must be present in Google Secret Manager before deployment: Django secret key, automation HMAC key, and the four Hostinger MySQL connection values. The Cloud Run runtime service account needs `secretAccessor` on those secrets and permission to read/write the private GCS bucket.
+There are no GitHub secrets for Google or MySQL. GitHub receives no long-lived cloud credential or database password. Runtime secrets must be present in Google Secret Manager before deployment: Django secret key, automation HMAC key, Make webhook URL, and the four Hostinger MySQL connection values. The Cloud Run runtime service account needs `secretAccessor` on those secrets and permission to read/write the private GCS bucket.
 
 Configure the production environment with required reviewers if manual production approval is desired. The workflow creates a candidate revision with zero traffic, checks database readiness and health, and switches traffic only after those checks succeed. It uses minimum instances zero, one CPU, 512 MiB memory, a 60-second timeout, concurrency 20 and maximum two instances.
 

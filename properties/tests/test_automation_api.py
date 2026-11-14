@@ -83,6 +83,18 @@ def test_input_is_signed_public_only_and_images_expire(client, listing):
 
 
 @pytest.mark.django_db
+def test_automation_input_only_serves_a_pending_generation(client, listing):
+    listing.status = OpenPlotListing.Status.DRAFT
+    listing.save(update_fields=["status"])
+    path = reverse("automation-input", args=[listing.public_id])
+
+    response = signed_request(client, "GET", path)
+
+    assert response.status_code == 409
+    assert response.json() == {"error": "Listing is not awaiting generation"}
+
+
+@pytest.mark.django_db
 def test_generation_callback_is_validated_and_idempotent(client, listing):
     path = reverse("generation-result", args=[listing.public_id])
     payload = {
