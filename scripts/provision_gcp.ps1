@@ -27,7 +27,10 @@ $provider = 'github'
 $secretNames = @(
     'propertypost-django-secret-key',
     'propertypost-automation-hmac-secret',
-    'propertypost-database-url',
+    'propertypost-mysql-host',
+    'propertypost-mysql-database',
+    'propertypost-mysql-user',
+    'propertypost-mysql-password',
     'propertypost-firebase-web-api-key',
     'propertypost-gemini-api-key'
 )
@@ -76,7 +79,7 @@ if (-not $Apply) {
     return
 }
 
-$requiredApis = @('firestore.googleapis.com', 'artifactregistry.googleapis.com',
+$requiredApis = @('artifactregistry.googleapis.com',
     'secretmanager.googleapis.com', 'run.googleapis.com', 'iam.googleapis.com',
     'iamcredentials.googleapis.com', 'sts.googleapis.com', 'storage.googleapis.com')
 $enabledApis = @(Get-GcloudLines @('services', 'list', '--enabled', "--project=$ProjectId",
@@ -84,29 +87,6 @@ $enabledApis = @(Get-GcloudLines @('services', 'list', '--enabled', "--project=$
 $missingApis = @($requiredApis | Where-Object { $enabledApis -notcontains $_ })
 if ($missingApis.Count -gt 0) {
     Invoke-Gcloud (@('services', 'enable') + $missingApis + "--project=$ProjectId") | Out-Null
-}
-
-for ($attempt = 1; $attempt -le 6; $attempt++) {
-    try {
-        $databases = @(Get-GcloudLines @('firestore', 'databases', 'list', "--project=$ProjectId",
-            '--format=json') | ConvertFrom-Json)
-        break
-    } catch {
-        if ($attempt -eq 6) { throw }
-        Start-Sleep -Seconds 5
-    }
-}
-$defaultDatabase = $databases | Where-Object { $_.name -eq "projects/$ProjectId/databases/(default)" }
-if ($defaultDatabase) {
-    if ($defaultDatabase.type -ne 'FIRESTORE_NATIVE' -or $defaultDatabase.locationId -ne $Region) {
-        throw 'The existing default Firestore database has a different type or location.'
-    }
-    Write-Output 'Exists: Firestore Native (default)'
-} else {
-    Write-Output 'Creating: Firestore Native (default)'
-    Invoke-Gcloud @('firestore', 'databases', 'create', '--database=(default)',
-        '--type=firestore-native', "--location=$Region", '--delete-protection',
-        "--project=$ProjectId") | Out-Null
 }
 
 Ensure-ListedResource $bucket @('storage', 'buckets', 'list', "--project=$ProjectId", '--format=value(name)') `
@@ -149,8 +129,6 @@ Ensure-ListedResource $provider @('iam', 'workload-identity-pools', 'providers',
       '--attribute-mapping=google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref',
       "--attribute-condition=$condition")
 
-Invoke-Gcloud @('projects', 'add-iam-policy-binding', $ProjectId,
-    "--member=serviceAccount:$runtimeEmail", '--role=roles/datastore.user', '--condition=None') | Out-Null
 foreach ($role in @('roles/storage.objectCreator', 'roles/storage.objectViewer')) {
     Invoke-Gcloud @('storage', 'buckets', 'add-iam-policy-binding', "gs://$bucket",
         "--member=serviceAccount:$runtimeEmail", "--role=$role") | Out-Null

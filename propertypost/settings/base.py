@@ -1,5 +1,6 @@
 """Settings shared by all PropertyPost environments."""
 
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -45,13 +46,6 @@ TEMPLATES = [
 WSGI_APPLICATION = "propertypost.wsgi.application"
 ASGI_APPLICATION = "propertypost.asgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
-}
-
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -73,7 +67,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "broker-login"
 AUTH_ADAPTER = "local"
-DATA_ADAPTER = "local"
+OBJECT_ADAPTER = "local"
 CAPTION_ADAPTER = "local"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
@@ -90,3 +84,14 @@ LOGGING = {
 AUTOMATION_HMAC_SECRET = ""
 AUTOMATION_MAX_SKEW_SECONDS = 300
 AUTOMATION_IMAGE_TTL_SECONDS = 300
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": os.environ.get("MYSQL_DATABASE", "propertypost"),
+        "USER": os.environ.get("MYSQL_USER", "propertypost"),
+        "PASSWORD": os.environ.get("MYSQL_PASSWORD", ""),
+        "HOST": os.environ.get("MYSQL_HOST", "127.0.0.1"),
+        "PORT": os.environ.get("MYSQL_PORT", "3306"),
+        "OPTIONS": {"charset": "utf8mb4"},
+    }
+}

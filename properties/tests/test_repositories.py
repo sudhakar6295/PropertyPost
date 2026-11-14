@@ -1,49 +1,57 @@
-from collections.abc import Mapping
-from typing import Any
+import pytest
+from django.contrib.auth import get_user_model
 
-from properties.firestore import private_document_path, public_document_path
-from properties.repositories.firestore import (
-    FirestorePrivateOpenPlotRepository,
-    FirestorePublicOpenPlotRepository,
+from properties.domain import PrivateOpenPlot
+from properties.models import OpenPlotListing, OpenPlotPrivateDetails
+from properties.repositories.django import (
+    DjangoPrivateOpenPlotRepository,
+    DjangoPublicOpenPlotRepository,
 )
 from properties.tests.test_serialization import PLOT_ID, make_private_plot, make_public_plot
 
 
-class InMemoryDocumentStore:
-    def __init__(self) -> None:
-        self.documents: dict[str, dict[str, Any]] = {}
-
-    def get_document(self, path: str) -> Mapping[str, Any] | None:
-        return self.documents.get(path)
-
-    def set_document(self, path: str, document: Mapping[str, Any]) -> None:
-        self.documents[path] = dict(document)
-
-    def query_documents(
-        self, collection: str, *, field: str, operator: str, value: object
-    ) -> list[Mapping[str, Any]]:
-        assert operator == "=="
-        results = []
-        for path, document in self.documents.items():
-            if path.startswith(f"{collection}/") and document.get(field) == value:
-                results.append({**document, "document_id": path.split("/", maxsplit=1)[1]})
-        return results
-
-
-def test_firestore_repositories_round_trip_through_separate_paths():
-    store = InMemoryDocumentStore()
-    public_repository = FirestorePublicOpenPlotRepository(store)
-    private_repository = FirestorePrivateOpenPlotRepository(store)
+@pytest.mark.django_db
+def test_mysql_repositories_keep_public_and_private_fields_separate():
+    broker = get_user_model().objects.create_user(username="broker")
     public = make_public_plot()
+    listing = OpenPlotListing.objects.create(
+        public_id=PLOT_ID,
+        broker=broker,
+        status=public.status,
+        title=public.title,
+        location=public.location,
+        landmark=public.landmark,
+        area=public.area,
+        area_unit=public.area_unit,
+        total_price=public.total_price,
+        price_per_unit=public.price_per_unit,
+        facing=public.facing,
+        road_width_ft=public.road_width_ft,
+        approval_type=public.approval_type,
+        contact_number=public.contact_number,
+        language=public.language,
+    )
     private = make_private_plot()
+    OpenPlotPrivateDetails.objects.create(
+        listing=listing,
+        owner_name=private.owner_name,
+        owner_phone=private.owner_phone,
+        internal_notes=private.internal_notes,
+        negotiable_amount=private.negotiable_amount,
+    )
 
-    public_repository.save(public)
-    private_repository.save(private)
+    public_repository = DjangoPublicOpenPlotRepository()
+    private_repository = DjangoPrivateOpenPlotRepository()
 
-    assert set(store.documents) == {
-        public_document_path(PLOT_ID),
-        private_document_path(PLOT_ID),
-    }
     assert public_repository.get(PLOT_ID) == public
-    assert private_repository.get(PLOT_ID) == private
     assert public_repository.list_published() == [public]
+    assert private_repository.get(PLOT_ID) == private
+    updated = PrivateOpenPlot(
+        listing_id=PLOT_ID,
+        owner_name="Owner updated",
+        owner_phone=private.owner_phone,
+        internal_notes=private.internal_notes,
+        negotiable_amount=4_500_000,
+    )
+    private_repository.save(updated)
+    assert private_repository.get(PLOT_ID) == updated

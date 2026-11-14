@@ -14,14 +14,12 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from .captions import GeminiCaptionProvider, LocalCaptionProvider
-from .domain import PrivateOpenPlot
-from .firestore import to_private_document, to_public_document
 from .forms import AdvertEditForm, GenerateForm, PhotoForm, PlotForm, PrivateDetailsForm
 from .models import AdvertDraft, OpenPlotListing, OpenPlotPrivateDetails, PlotPhoto
 from .posters import render_poster
 from .repositories.django import _to_public_domain
 from .serializers import serialize_public_details
-from .services import document_store, object_store
+from .services import object_store
 
 
 def broker_login(request):
@@ -62,7 +60,6 @@ def broker_login(request):
                 user.set_unusable_password()
                 user.save(update_fields=["password"])
                 login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-                document_store().put("users", claims["uid"], {"uid": claims["uid"]})
                 response = redirect("dashboard")
                 response.set_cookie(
                     "firebase_session",
@@ -125,29 +122,6 @@ def save_plot(request, plot=None):
             details.save()
             if plot:
                 AdvertDraft.objects.filter(listing=listing).delete()
-        if settings.DATA_ADAPTER == "google":
-            store = document_store()
-            store.put(
-                "listings",
-                str(listing.public_id),
-                {
-                    **to_public_document(_to_public_domain(listing)),
-                    "broker_id": str(request.user.pk),
-                },
-            )
-            store.put(
-                "listing_private",
-                str(listing.public_id),
-                to_private_document(
-                    PrivateOpenPlot(
-                        listing.public_id,
-                        details.owner_name,
-                        details.owner_phone,
-                        details.internal_notes,
-                        details.negotiable_amount,
-                    )
-                ),
-            )
         return redirect("upload-photos", public_id=listing.public_id)
     return render(
         request,
@@ -201,25 +175,6 @@ def upload_photos(request, public_id):
         AdvertDraft.objects.filter(listing=plot).delete()
         plot.status = OpenPlotListing.Status.DRAFT
         plot.save(update_fields=["status", "updated_at"])
-        if settings.DATA_ADAPTER == "google":
-            document_store().put(
-                "listings",
-                str(plot.public_id),
-                {
-                    **to_public_document(_to_public_domain(plot)),
-                    "broker_id": str(request.user.pk),
-                    "photos": list(
-                        plot.photos.values(
-                            "object_path",
-                            "content_type",
-                            "size_bytes",
-                            "sort_order",
-                            "is_main",
-                            "caption",
-                        )
-                    ),
-                },
-            )
         return redirect("upload-photos", public_id=public_id)
     return render(request, "properties/photos.html", {"plot": plot, "form": form})
 
@@ -244,25 +199,6 @@ def arrange_photos(request, public_id):
         AdvertDraft.objects.filter(listing=plot).delete()
         plot.status = OpenPlotListing.Status.DRAFT
         plot.save(update_fields=["status", "updated_at"])
-    if settings.DATA_ADAPTER == "google":
-        document_store().put(
-            "listings",
-            str(plot.public_id),
-            {
-                **to_public_document(_to_public_domain(plot)),
-                "broker_id": str(request.user.pk),
-                "photos": list(
-                    plot.photos.values(
-                        "object_path",
-                        "content_type",
-                        "size_bytes",
-                        "sort_order",
-                        "is_main",
-                        "caption",
-                    )
-                ),
-            },
-        )
     return redirect("upload-photos", public_id=public_id)
 
 

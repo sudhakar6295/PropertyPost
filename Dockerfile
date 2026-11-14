@@ -2,7 +2,8 @@ FROM ghcr.io/astral-sh/uv:0.8.11 AS uv
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 UV_LINK_MODE=copy \
-    UV_NO_DEV=1 UV_PROJECT_ENVIRONMENT=/app/.venv
+    UV_NO_DEV=1 UV_PROJECT_ENVIRONMENT=/app/.venv \
+    DJANGO_SETTINGS_MODULE=propertypost.settings.production
 WORKDIR /app
 COPY --from=uv /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock README.md ./

@@ -16,6 +16,12 @@ def test_health_and_readiness(client, db):
     assert client.get(reverse("ready")).json() == {"status": "ready"}
 
 
+def test_local_configuration_uses_mysql(settings):
+    assert settings.DATABASES["default"]["ENGINE"] == "django.db.backends.mysql"
+    assert settings.DATABASES["default"]["HOST"]
+    assert settings.DATABASES["default"]["PORT"] == "3306"
+
+
 def test_local_object_store_confines_paths(settings, tmp_path):
     settings.MEDIA_ROOT = tmp_path
     store = LocalFileObjectStore()

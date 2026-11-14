@@ -2,7 +2,7 @@ name: Deploy PropertyPost to Cloud Run
 
 on:
   workflow_run:
-    workflows: [Manual CI]
+    workflows: [CI]
     types: [completed]
     branches: [main]
 
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository }}
     name: Deploy verified main revision
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -73,8 +73,8 @@ jobs:
             --no-allow-unauthenticated \
             --no-traffic \
             --tag="verify-${COMMIT_SHA::12}" \
-            --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FIRESTORE_DATABASE=(default),GCS_PRIVATE_BUCKET=$BUCKET,FIREBASE_PROJECT_ID=$PROJECT_ID,CAPTION_ADAPTER=local" \
-            --set-secrets="DJANGO_SECRET_KEY=propertypost-django-secret-key:latest,AUTOMATION_HMAC_SECRET=propertypost-automation-hmac-secret:latest,FIREBASE_WEB_API_KEY=propertypost-firebase-web-api-key:latest,GEMINI_API_KEY=propertypost-gemini-api-key:latest"
+            --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCS_PRIVATE_BUCKET=$BUCKET,FIREBASE_PROJECT_ID=$PROJECT_ID,CAPTION_ADAPTER=local,MYSQL_PORT=3306,MYSQL_SSL_ENABLED=true,DJANGO_ALLOWED_HOSTS=.run.app,DJANGO_CSRF_TRUSTED_ORIGINS=https://*.run.app" \
+            --set-secrets="DJANGO_SECRET_KEY=propertypost-django-secret-key:latest,AUTOMATION_HMAC_SECRET=propertypost-automation-hmac-secret:latest,FIREBASE_WEB_API_KEY=propertypost-firebase-web-api-key:latest,MYSQL_HOST=propertypost-mysql-host:latest,MYSQL_DATABASE=propertypost-mysql-database:latest,MYSQL_USER=propertypost-mysql-user:latest,MYSQL_PASSWORD=propertypost-mysql-password:latest"
 
           SERVICE_URL="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)')"
           SERVICE_HOST="${SERVICE_URL#https://}"

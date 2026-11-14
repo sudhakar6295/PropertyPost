@@ -1,62 +1,9 @@
 """Cloud service adapters; Google clients use Application Default Credentials."""
 
-from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
 
 from django.conf import settings
-from google.cloud import firestore, storage
-
-COLLECTIONS = frozenset(
-    {"users", "sites", "listings", "listing_private", "generation_jobs", "publication_jobs"}
-)
-
-
-class GoogleDocumentStore:
-    def __init__(self, project_id: str, database: str = "(default)", client=None):
-        self.client = client or firestore.Client(project=project_id, database=database)
-
-    def _reference(self, collection: str, document_id: str):
-        if collection not in COLLECTIONS:
-            raise ValueError("Unknown collection")
-        if not document_id or "/" in document_id:
-            raise ValueError("Invalid document ID")
-        return self.client.collection(collection).document(document_id)
-
-    def get(self, collection: str, document_id: str) -> dict[str, Any] | None:
-        snapshot = self._reference(collection, document_id).get()
-        return snapshot.to_dict() if snapshot.exists else None
-
-    def put(self, collection: str, document_id: str, data: Mapping[str, Any]) -> None:
-        self._reference(collection, document_id).set(dict(data))
-
-    def query(self, collection: str, field: str, value: object) -> list[dict[str, Any]]:
-        if collection not in COLLECTIONS:
-            raise ValueError("Unknown collection")
-        results = (
-            self.client.collection(collection)
-            .where(filter=firestore.FieldFilter(field, "==", value))
-            .stream()
-        )
-        return [{"document_id": snap.id, **snap.to_dict()} for snap in results]
-
-
-class LocalDocumentStore:
-    def __init__(self):
-        self.documents: dict[tuple[str, str], dict[str, Any]] = {}
-
-    def get(self, collection: str, document_id: str) -> dict[str, Any] | None:
-        return self.documents.get((collection, document_id))
-
-    def put(self, collection: str, document_id: str, data: Mapping[str, Any]) -> None:
-        self.documents[(collection, document_id)] = dict(data)
-
-    def query(self, collection: str, field: str, value: object) -> list[dict[str, Any]]:
-        return [
-            {"document_id": document_id, **data}
-            for (name, document_id), data in self.documents.items()
-            if name == collection and data.get(field) == value
-        ]
+from google.cloud import storage
 
 
 class GoogleObjectStore:

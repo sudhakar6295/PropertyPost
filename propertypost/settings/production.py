@@ -1,7 +1,6 @@
 """Production settings sourced entirely from the environment."""
 
 import os
-from urllib.parse import urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -24,32 +23,36 @@ STORAGES = {
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
 AUTH_ADAPTER = "firebase"
-DATA_ADAPTER = "google"
+OBJECT_ADAPTER = "google"
 CAPTION_ADAPTER = os.environ.get("CAPTION_ADAPTER", "local")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
 AUTOMATION_HMAC_SECRET = required_env("AUTOMATION_HMAC_SECRET")
-GOOGLE_CLOUD_PROJECT = required_env("GOOGLE_CLOUD_PROJECT")
-FIRESTORE_DATABASE = os.environ.get("FIRESTORE_DATABASE", "(default)")
 GCS_PRIVATE_BUCKET = required_env("GCS_PRIVATE_BUCKET")
+GOOGLE_CLOUD_PROJECT = required_env("GOOGLE_CLOUD_PROJECT")
 FIREBASE_PROJECT_ID = required_env("FIREBASE_PROJECT_ID")
 FIREBASE_WEB_API_KEY = required_env("FIREBASE_WEB_API_KEY")
 SECRET_KEY = required_env("DJANGO_SECRET_KEY")
-database_url = urlparse(required_env("DATABASE_URL"))
-if database_url.scheme not in {"postgres", "postgresql"} or not database_url.hostname:
-    raise ImproperlyConfigured("DATABASE_URL must be a PostgreSQL URL.")
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": database_url.path.lstrip("/"),
-        "USER": database_url.username,
-        "PASSWORD": database_url.password,
-        "HOST": database_url.hostname,
-        "PORT": database_url.port or 5432,
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": required_env("MYSQL_DATABASE"),
+        "USER": required_env("MYSQL_USER"),
+        "PASSWORD": required_env("MYSQL_PASSWORD"),
+        "HOST": required_env("MYSQL_HOST"),
+        "PORT": os.environ.get("MYSQL_PORT", "3306"),
         "CONN_MAX_AGE": 60,
-        "OPTIONS": {"sslmode": "require"},
+        "OPTIONS": {"charset": "utf8mb4"},
     }
 }
+if os.environ.get("MYSQL_SSL_ENABLED", "true").lower() == "true":
+    DATABASES["default"]["OPTIONS"].update(
+        {
+            "ssl_verify_cert": True,
+            "ssl_verify_identity": True,
+            **({"ssl_ca": os.environ["MYSQL_SSL_CA"]} if os.environ.get("MYSQL_SSL_CA") else {}),
+        }
+    )
 ALLOWED_HOSTS = [
     host.strip() for host in required_env("DJANGO_ALLOWED_HOSTS").split(",") if host.strip()
 ]

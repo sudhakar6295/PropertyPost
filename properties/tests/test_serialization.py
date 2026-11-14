@@ -3,13 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from properties.domain import PrivateOpenPlot, PublicOpenPlot
-from properties.firestore import (
-    private_document_path,
-    public_document_path,
-    to_private_document,
-    to_public_document,
-)
-from properties.serializers import PRIVATE_DETAIL_FIELDS, PUBLIC_DETAIL_FIELDS
+from properties.serializers import serialize_private_details, serialize_public_details
 
 PLOT_ID = UUID("2ed678c5-8b94-41d3-a803-2ffddb0cb485")
 
@@ -43,20 +37,14 @@ def make_private_plot() -> PrivateOpenPlot:
     )
 
 
-def test_firestore_uses_separate_public_and_private_documents():
-    public_document = to_public_document(make_public_plot())
-    private_document = to_private_document(make_private_plot())
-
-    assert public_document_path(PLOT_ID) == f"open_plot_public/{PLOT_ID}"
-    assert private_document_path(PLOT_ID) == f"open_plot_private/{PLOT_ID}"
-    assert set(public_document["public_details"]) == PUBLIC_DETAIL_FIELDS
-    assert set(private_document["private_details"]) == PRIVATE_DETAIL_FIELDS
-    assert "private_details" not in public_document
-    assert "public_details" not in private_document
+def test_public_and_private_serializers_use_disjoint_field_sets():
+    public = serialize_public_details(make_public_plot())
+    private = serialize_private_details(make_private_plot())
+    assert set(public).isdisjoint(private)
 
 
 def test_private_values_never_appear_in_public_serialization():
-    serialized = json.dumps(to_public_document(make_public_plot()))
+    serialized = json.dumps(serialize_public_details(make_public_plot()))
 
     for private_value in (
         "Private Owner",

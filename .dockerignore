@@ -4,6 +4,8 @@
 .env.*
 !.env.example
 gha-creds-*.json
+db.sqlite3
+*.sqlite3-journal
 __pycache__
 *.pyc
 .pytest_cache
