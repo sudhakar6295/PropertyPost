@@ -15,6 +15,8 @@ from propertypost.logging import SafeJsonFormatter
 
 @pytest.mark.django_db
 def test_local_journey(client, django_user_model, settings, tmp_path):
+    settings.DEBUG = True
+    settings.MAKE_WEBHOOK_URL = ""
     settings.MEDIA_ROOT = tmp_path
     broker = django_user_model.objects.create_user(username="alice", password="StrongPass123!")
     assert client.get(reverse("dashboard")).status_code == 302
