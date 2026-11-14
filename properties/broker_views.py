@@ -219,6 +219,7 @@ def review_details(request, public_id):
 def generate_advert(request, public_id):
     plot = owned_plot(request, public_id)
     form = GenerateForm(request.POST or None, request.FILES or None)
+    has_main_photo = plot.photos.filter(is_main=True).exists()
     if request.method == "POST" and form.is_valid():
         photo = plot.photos.filter(is_main=True).first()
         if photo is None:
@@ -263,7 +264,15 @@ def generate_advert(request, public_id):
                 plot.status = OpenPlotListing.Status.REVIEW
                 plot.save(update_fields=["status", "updated_at"])
                 return redirect("review-details", public_id=public_id)
-    return render(request, "properties/generate.html", {"plot": plot, "form": form})
+    return render(
+        request,
+        "properties/generate.html",
+        {
+            "plot": plot,
+            "form": form,
+            "has_main_photo": has_main_photo,
+        },
+    )
 
 
 @login_required

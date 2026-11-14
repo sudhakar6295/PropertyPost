@@ -123,6 +123,22 @@ def test_other_broker_cannot_access_any_plot_step(client, django_user_model):
 
 
 @pytest.mark.django_db
+def test_generation_without_main_photo_explains_how_to_continue(client, django_user_model):
+    broker = django_user_model.objects.create_user(username="alice", password="StrongPass123!")
+    client.force_login(broker)
+    from properties.tests.test_views import create_listing
+
+    plot = create_listing("East-facing plot", OpenPlotListing.Status.DRAFT, broker)
+
+    response = client.get(reverse("generate-advert", args=[plot.public_id]))
+
+    assert response.status_code == 200
+    assert b"Add a main photo to continue" in response.content
+    assert reverse("upload-photos", args=[plot.public_id]).encode() in response.content
+    assert b"disabled" in response.content
+
+
+@pytest.mark.django_db
 def test_plot_database_error_is_safe_and_preserves_form_values(client, django_user_model, caplog):
     django_user_model.objects.create_user(username="alice", password="StrongPass123!")
     client.login(username="alice", password="StrongPass123!")
