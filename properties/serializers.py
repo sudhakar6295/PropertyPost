@@ -37,7 +37,7 @@ def serialize_public_details(plot: PublicOpenPlot) -> dict[str, Any]:
         "total_price": plot.total_price,
         "price_per_unit": str(plot.price_per_unit) if plot.price_per_unit is not None else None,
         "facing": plot.facing,
-        "road_width_ft": str(plot.road_width_ft),
+        "road_width_ft": str(plot.road_width_ft) if plot.road_width_ft is not None else None,
         "approval_type": plot.approval_type,
         "contact_number": plot.contact_number,
         "language": plot.language,

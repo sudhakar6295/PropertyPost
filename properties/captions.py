@@ -108,7 +108,8 @@ class GeminiCaptionProvider:
         }
         payload = {
             "model": self.model,
-            "input": "Write an accurate property advert. Do not invent facts. Public details: "
+            "input": "Write an accurate property advert in the language requested by the "
+            "public language code. Do not invent facts. Public details: "
             + json.dumps(details, ensure_ascii=False),
             "response_format": {"type": "text", "mime_type": "application/json", "schema": schema},
         }

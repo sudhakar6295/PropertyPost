@@ -1,36 +1,33 @@
 {% extends "base.html" %}
 {% block title %}My plots | PropertyPost{% endblock %}
 {% block content %}
-<div class="container py-5">
-  <div class="d-flex flex-wrap gap-3 justify-content-between align-items-center mb-4">
-    <div><p class="text-primary fw-semibold mb-1">YOUR WORKSPACE</p><h1 class="h2 mb-0">My plots</h1></div>
+<div class="container page-shell">
+  <div class="d-flex flex-wrap gap-3 justify-content-between align-items-end mb-4">
+    <div><p class="eyebrow">YOUR WORKSPACE</p><h1 class="page-title display-6">My plots</h1><p class="page-intro mb-0">Create an advert, follow its progress, and return to any plot whenever you need.</p></div>
     <a href="{% url 'add-plot' %}" class="btn btn-primary">+ Add a plot</a>
   </div>
-  <div class="row g-3">
+  <div class="row g-4">
     {% for plot in listings %}
-    <div class="col-12 col-md-6"><div class="card border-0 shadow-sm h-100"><div class="card-body p-4">
-      <div class="d-flex justify-content-between gap-2"><h2 class="h5">{{ plot.title }}</h2><span class="badge text-bg-light border">{{ plot.get_status_display }}</span></div>
-      <p class="text-secondary">{{ plot.location }} · {{ plot.area }} {{ plot.get_area_unit_display }}</p>
-      <div class="d-flex flex-wrap gap-2">
-        {% if plot.status == 'generating' %}
-          <a class="btn btn-primary btn-sm" href="{% url 'generate-advert' plot.public_id %}">Advert in progress</a>
-        {% elif plot.status == 'review' %}
-          <a class="btn btn-primary btn-sm" href="{% url 'review-details' plot.public_id %}">Review advert</a>
-        {% elif plot.status == 'approved' %}
-          <a class="btn btn-primary btn-sm" href="{% url 'advert-preview' plot.public_id %}">View advert</a>
-        {% elif plot.status == 'publishing' or plot.status == 'published' %}
-          <a class="btn btn-primary btn-sm" href="{% url 'published-result' plot.public_id %}">Posting result</a>
-        {% elif plot.status == 'failed' and plot.publication_request_id %}
-          <a class="btn btn-primary btn-sm" href="{% url 'advert-preview' plot.public_id %}">Check posting</a>
-        {% else %}
-          <a class="btn btn-primary btn-sm" href="{% url 'generate-advert' plot.public_id %}">Create advert</a>
-        {% endif %}
-        <a class="btn btn-outline-primary btn-sm" href="{% url 'edit-plot' plot.public_id %}">Edit plot</a>
-        <a class="btn btn-outline-secondary btn-sm" href="{% url 'advert-history' plot.public_id %}">Advert history</a>
-      </div>
-    </div></div></div>
+    <div class="col-12 col-md-6 col-xl-4">
+      <article class="card listing-card h-100"><div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-3"><span class="eyebrow mb-0">OPEN PLOT / LAND</span><span class="status-pill">{{ plot.get_status_display }}</span></div>
+        <h2 class="h4 fw-bold mb-2">{{ plot.title }}</h2>
+        <div class="listing-meta mb-3"><span class="meta-chip">{{ plot.location }}</span><span class="meta-chip">{{ plot.area }} {{ plot.get_area_unit_display }}</span></div>
+        <p class="fs-5 fw-bold mb-0">₹{{ plot.total_price }}</p>
+        <div class="listing-actions d-flex flex-wrap gap-2">
+          {% if plot.status == 'generating' %}<a class="btn btn-primary btn-sm" href="{% url 'generate-advert' plot.public_id %}">Advert in progress</a>
+          {% elif plot.status == 'review' %}<a class="btn btn-primary btn-sm" href="{% url 'review-details' plot.public_id %}">Review advert</a>
+          {% elif plot.status == 'approved' %}<a class="btn btn-primary btn-sm" href="{% url 'advert-preview' plot.public_id %}">View advert</a>
+          {% elif plot.status == 'publishing' or plot.status == 'published' %}<a class="btn btn-primary btn-sm" href="{% url 'published-result' plot.public_id %}">Posting result</a>
+          {% elif plot.status == 'failed' and plot.publication_request_id %}<a class="btn btn-primary btn-sm" href="{% url 'advert-preview' plot.public_id %}">Check posting</a>
+          {% else %}<a class="btn btn-primary btn-sm" href="{% url 'generate-advert' plot.public_id %}">Create advert</a>{% endif %}
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'edit-plot' plot.public_id %}">Edit plot</a>
+          <a class="btn btn-outline-secondary btn-sm" href="{% url 'advert-history' plot.public_id %}">Advert history</a>
+        </div>
+      </div></article>
+    </div>
     {% empty %}
-    <div class="col-12"><div class="card border-0 shadow-sm"><div class="card-body p-5 text-center"><h2 class="h5">Your first advert starts here</h2><p class="text-secondary">Add the plot details and photos in a few steps.</p><a class="btn btn-primary" href="{% url 'add-plot' %}">Add a plot</a></div></div></div>
+    <div class="col-12"><div class="card"><div class="card-body p-4 p-md-5 text-center"><span class="empty-icon mb-3" aria-hidden="true">⌂</span><h2 class="h4 fw-bold">Your first advert starts here</h2><p class="page-intro mx-auto">Add your plot details and photos, then create an advert you can review before posting.</p><a class="btn btn-primary mt-2" href="{% url 'add-plot' %}">Add a plot</a></div></div></div>
     {% endfor %}
   </div>
 </div>

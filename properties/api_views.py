@@ -248,6 +248,7 @@ def _generation(listing, data):
         listing=listing,
         defaults={
             "template": template,
+            "language": listing.language,
             "version_number": next_version_number(listing),
             "poster_path": path,
             "headline": caption.headline,

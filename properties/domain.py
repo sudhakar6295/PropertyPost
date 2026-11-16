@@ -19,7 +19,7 @@ class PublicOpenPlot:
     total_price: int
     price_per_unit: Decimal | None
     facing: str
-    road_width_ft: Decimal
+    road_width_ft: Decimal | None
     approval_type: str
     contact_number: str
     language: str

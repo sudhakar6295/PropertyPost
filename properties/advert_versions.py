@@ -17,6 +17,7 @@ def archive_current(listing):
         version_number=advert.version_number,
         defaults={
             "template": advert.template,
+            "language": advert.language,
             "poster_path": advert.poster_path,
             "headline": advert.headline,
             "caption": advert.caption,

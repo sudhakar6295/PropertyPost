@@ -1,6 +1,48 @@
 {% extends "base.html" %}
 {% block title %}{% if plot %}Edit plot{% else %}Add plot{% endif %} | PropertyPost{% endblock %}
-{% block content %}<div class="container py-5"><div class="row justify-content-center"><div class="col-12 col-lg-9"><a href="{% url 'dashboard' %}" class="text-decoration-none">← My plots</a><h1 class="h2 mt-3">{% if plot %}Edit plot{% else %}Add a plot{% endif %}</h1><p class="text-secondary">Tell buyers what makes this land a good choice.</p><form method="post">{% csrf_token %}{% if public_form.non_field_errors or private_form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ public_form.non_field_errors }}{{ private_form.non_field_errors }}</div>{% endif %}
-<section class="card border-0 shadow-sm mb-4"><div class="card-body p-4"><h2 class="h4">Shown in your advert</h2><p class="text-secondary">Buyers can see these details.</p><div class="row g-3">{% for field in public_form %}<div class="col-12 col-md-6"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}</div>{% endfor %}</div></div></section>
-<section class="card border-0 shadow-sm mb-4"><div class="card-body p-4"><h2 class="h4">Private notes—only visible to you</h2><p class="text-secondary">These details will not appear in your advert.</p><div class="row g-3">{% for field in private_form %}<div class="col-12 col-md-6"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}</div>{% endfor %}</div></div></section>
-<button class="btn btn-primary btn-lg" type="submit">Save and add photos</button></form></div></div></div>{% endblock %}
+{% block content %}
+<div class="container py-4 py-lg-5">
+  <div class="row justify-content-center"><div class="col-12 col-xl-10">
+    <a href="{% url 'dashboard' %}" class="text-decoration-none">← My plots</a>
+    <header class="mt-3 mb-4"><h1 class="h2">{% if plot %}Edit plot{% else %}Add a plot{% endif %}</h1><p class="text-secondary">Add the details buyers need. You can review everything before creating an advert.</p></header>
+    <form method="post" novalidate>{% csrf_token %}
+      {% if public_form.non_field_errors or private_form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ public_form.non_field_errors }}{{ private_form.non_field_errors }}</div>{% endif %}
+      <section class="card border-0 shadow-sm mb-4" aria-labelledby="public-heading"><div class="card-body p-4 p-lg-5">
+        <h2 class="h4" id="public-heading">Shown in your advert</h2><p class="text-secondary">Buyers can see these plot details and the contact number below.</p>
+        <div class="row g-3">
+          {% for field in public_form %}
+            {% if field.name != 'contact_country_code' and field.name != 'contact_number' and field.name != 'language' %}
+              <div class="col-12 col-md-6"><label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="text-danger" aria-label="required">*</span>{% endif %}</label>{{ field }}
+                {% if field.name == 'total_price' %}<div class="form-text">We calculate the price per area unit for you.</div>{% endif %}
+                {% if field.name == 'road_width_ft' %}<div class="form-text">Optional. Leave blank if unknown.</div>{% endif %}
+                {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+            {% endif %}
+          {% endfor %}
+          <div class="col-12"><label class="form-label fw-semibold" for="{{ public_form.contact_number.id_for_label }}">Number shown to buyers <span class="text-danger" aria-label="required">*</span></label>
+            <div class="row g-2"><div class="col-5 col-sm-4 col-lg-3">{{ public_form.contact_country_code }}</div><div class="col-7 col-sm-8 col-lg-5">{{ public_form.contact_number }}</div></div>
+            <div class="form-text">Choose a country, then enter the phone number without its country code.</div>
+            {% for error in public_form.contact_country_code.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            {% for error in public_form.contact_number.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+        </div>
+      </div></section>
+      <section class="card border-0 shadow-sm mb-4" aria-labelledby="private-heading"><div class="card-body p-4 p-lg-5">
+        <h2 class="h4" id="private-heading">Private notes—only visible to you</h2><p class="text-secondary">Owner and negotiation details stay private.</p>
+        <div class="row g-3">{% for field in private_form %}
+          {% if field.name != 'owner_country_code' and field.name != 'owner_phone' %}<div class="col-12 {% if field.name == 'internal_notes' %}col-lg-12{% else %}col-md-6{% endif %}">
+            <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="text-danger" aria-label="required">*</span>{% endif %}</label>{{ field }}
+            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>{% endif %}
+        {% endfor %}
+          <div class="col-12"><label class="form-label fw-semibold" for="{{ private_form.owner_phone.id_for_label }}">Owner phone <span class="text-danger" aria-label="required">*</span></label>
+            <div class="row g-2"><div class="col-5 col-sm-4 col-lg-3">{{ private_form.owner_country_code }}</div><div class="col-7 col-sm-8 col-lg-5">{{ private_form.owner_phone }}</div></div>
+            <div class="form-text">Only you can see this number.</div>
+            {% for error in private_form.owner_country_code.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            {% for error in private_form.owner_phone.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+        </div>
+      </div></section>
+      <div class="d-grid d-sm-flex gap-2"><button class="btn btn-primary btn-lg px-4" type="submit">Save and add photos</button><a class="btn btn-outline-secondary btn-lg" href="{% url 'dashboard' %}">Cancel</a></div>
+    </form>
+  </div></div>
+</div>
+{% endblock %}

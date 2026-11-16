@@ -411,6 +411,7 @@ def generate_advert(request, public_id):
                 archive_current(plot)
                 AdvertDraft.objects.filter(listing=plot).delete()
                 plot.status = OpenPlotListing.Status.GENERATING
+                plot.language = form.cleaned_data["language"]
                 plot.generation_request_id = request_id
                 plot.publication_request_id = None
                 plot.publication_platforms = []
@@ -418,6 +419,7 @@ def generate_advert(request, public_id):
                 plot.save(
                     update_fields=[
                         "status",
+                        "language",
                         "generation_request_id",
                         "publication_request_id",
                         "publication_platforms",
@@ -509,6 +511,7 @@ def generate_advert(request, public_id):
                 archive_current(plot)
                 AdvertDraft.objects.filter(listing=plot).delete()
                 plot.status = OpenPlotListing.Status.GENERATING
+                plot.language = form.cleaned_data["language"]
                 plot.generation_request_id = uuid4()
                 plot.publication_request_id = None
                 plot.publication_platforms = []
@@ -516,6 +519,7 @@ def generate_advert(request, public_id):
                 plot.save(
                     update_fields=[
                         "status",
+                        "language",
                         "generation_request_id",
                         "publication_request_id",
                         "publication_platforms",
@@ -549,6 +553,7 @@ def generate_advert(request, public_id):
                     listing=plot,
                     defaults={
                         "template": form.cleaned_data["template"],
+                        "language": plot.language,
                         "version_number": next_version_number(plot),
                         "poster_path": path,
                         "headline": caption.headline,

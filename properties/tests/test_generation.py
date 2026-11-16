@@ -46,6 +46,8 @@ def test_caption_provider_input_excludes_private_data():
     )
     assert provider.generate(public).headline == "A plot"
     serialized = json.dumps(seen)
+    assert "language requested by the public language code" in seen[0]["input"]
+    assert '"language": "te"' in seen[0]["input"]
     assert "owner_name" not in serialized
     assert "negotiable_amount" not in serialized
     assert "internal_notes" not in serialized

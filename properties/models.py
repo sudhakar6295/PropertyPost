@@ -81,11 +81,13 @@ class OpenPlotListing(models.Model):
     road_width_ft = models.DecimalField(
         max_digits=7,
         decimal_places=2,
+        blank=True,
+        null=True,
         validators=[MinValueValidator(Decimal("0.01"))],
     )
     approval_type = models.CharField(max_length=16, choices=ApprovalType.choices)
     contact_number = models.CharField(max_length=16, validators=[phone_number_validator])
-    language = models.CharField(max_length=2, choices=Language.choices)
+    language = models.CharField(max_length=2, choices=Language.choices, default=Language.ENGLISH)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
     generation_request_id = models.UUIDField(null=True, blank=True)
     publication_request_id = models.UUIDField(null=True, blank=True)
@@ -159,6 +161,11 @@ class AdvertDraft(models.Model):
     listing = models.OneToOneField(OpenPlotListing, on_delete=models.CASCADE, related_name="advert")
     version_number = models.PositiveIntegerField(default=1)
     template = models.CharField(max_length=16)
+    language = models.CharField(
+        max_length=2,
+        choices=OpenPlotListing.Language.choices,
+        default=OpenPlotListing.Language.ENGLISH,
+    )
     poster_path = models.CharField(max_length=300)
     headline = models.CharField(max_length=100)
     caption = models.TextField(max_length=1000)
@@ -177,6 +184,11 @@ class AdvertVersion(models.Model):
     )
     version_number = models.PositiveIntegerField()
     template = models.CharField(max_length=16)
+    language = models.CharField(
+        max_length=2,
+        choices=OpenPlotListing.Language.choices,
+        default=OpenPlotListing.Language.ENGLISH,
+    )
     poster_path = models.CharField(max_length=300)
     headline = models.CharField(max_length=100)
     caption = models.TextField(max_length=1000)

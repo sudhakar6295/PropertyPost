@@ -1,3 +1,42 @@
 {% extends "base.html" %}
 {% block title %}Upload photos | PropertyPost{% endblock %}
-{% load static %}{% block content %}<div class="container py-5"><div class="row justify-content-center"><div class="col-12 col-lg-9"><h1 class="h2">Upload photos</h1><p class="text-secondary">Choose clear photos of {{ plot.title }}. JPG, PNG, or WebP; up to 5 MB each.</p><form method="post" action="{% url 'arrange-photos' plot.public_id %}">{% csrf_token %}<div class="row g-3 mb-3" id="photo-grid">{% for photo in plot.photos.all %}<div class="col-6 col-md-4 photo-card"><img class="img-fluid rounded" src="{% url 'private-photo' plot.public_id photo.pk %}" alt="{{ photo.caption|default:plot.title }}"><p class="small mt-1">{{ photo.caption }}</p><input type="hidden" name="photo_order" value="{{ photo.pk }}"><div class="form-check"><input class="form-check-input" type="radio" name="main_photo" value="{{ photo.pk }}" id="main-{{ photo.pk }}" {% if photo.is_main %}checked{% endif %}><label class="form-check-label" for="main-{{ photo.pk }}">Main photo</label></div><div class="d-flex gap-1 mt-2"><button type="button" class="btn btn-outline-secondary btn-sm move-up">Move up</button><button type="button" class="btn btn-outline-secondary btn-sm move-down">Move down</button></div></div>{% endfor %}</div>{% if plot.photos.exists %}<button class="btn btn-outline-primary mb-4" type="submit">Save photo order</button>{% endif %}</form><form method="post" enctype="multipart/form-data" class="card border-0 shadow-sm mb-4"><div class="card-body p-4">{% csrf_token %}{% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}</div>{% endfor %}<button class="btn btn-outline-primary" type="submit">Upload photo</button></div></form><a class="btn btn-primary" href="{% url 'review-details' plot.public_id %}">Review details →</a></div></div></div><script src="{% static 'js/photos.js' %}" defer></script>{% endblock %}
+{% load static %}
+{% block content %}
+<div class="container page-shell"><div class="row justify-content-center"><div class="col-12 col-xl-10">
+  <p class="eyebrow">PLOT PHOTOS</p><h1 class="page-title display-6">Upload photos</h1>
+  <p class="page-intro">Choose clear photos of {{ plot.title }}. JPG, PNG, or WebP; up to 5 MB each.</p>
+  <div class="step-row" aria-label="Advert steps"><span class="step-item">1 · Plot details</span><span class="step-divider">›</span><span class="step-item current">2 · Photos</span><span class="step-divider">›</span><span class="step-item">3 · Review</span><span class="step-divider">›</span><span class="step-item">4 · Advert</span></div>
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <section class="card h-100"><div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center gap-2 mb-3"><h2 class="section-heading mb-0">Your photos</h2><span class="status-pill">{{ plot.photos.count }} uploaded</span></div>
+        <p class="small text-secondary">Choose one main photo for the poster. Use the buttons to set the order buyers will see.</p>
+        <form method="post" action="{% url 'arrange-photos' plot.public_id %}">{% csrf_token %}
+          <div class="row g-3 mb-3" id="photo-grid">
+          {% for photo in plot.photos.all %}
+            <div class="col-6 col-md-4 photo-card"><div class="photo-tile">
+              <img src="{% url 'private-photo' plot.public_id photo.pk %}" alt="{{ photo.caption|default:plot.title }}">
+              <p class="small mt-2 mb-1 text-truncate">{{ photo.caption }}</p>
+              <input type="hidden" name="photo_order" value="{{ photo.pk }}">
+              <div class="form-check"><input class="form-check-input" type="radio" name="main_photo" value="{{ photo.pk }}" id="main-{{ photo.pk }}" {% if photo.is_main %}checked{% endif %}><label class="form-check-label small" for="main-{{ photo.pk }}">Main photo</label></div>
+              <div class="d-flex gap-1 mt-2"><button type="button" class="btn btn-outline-secondary btn-sm move-up">↑ Up</button><button type="button" class="btn btn-outline-secondary btn-sm move-down">↓ Down</button></div>
+            </div></div>
+          {% empty %}<div class="col-12"><div class="notice-strip text-center">No photos yet. Add one using the form.</div></div>{% endfor %}
+          </div>
+          {% if plot.photos.exists %}<button class="btn btn-outline-primary" type="submit">Save photo order</button>{% endif %}
+        </form>
+      </div></section>
+    </div>
+    <div class="col-lg-5">
+      <section class="card mb-4"><div class="card-body p-4"><h2 class="section-heading">Add a photo</h2>
+        <form method="post" enctype="multipart/form-data">{% csrf_token %}
+          {% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}</div>{% endfor %}
+          <button class="btn btn-primary" type="submit">Upload photo</button>
+        </form>
+      </div></section>
+      <a class="btn btn-outline-primary w-100" href="{% url 'review-details' plot.public_id %}">Continue to review details →</a>
+    </div>
+  </div>
+</div></div></div>
+<script src="{% static 'js/photos.js' %}" defer></script>
+{% endblock %}

@@ -1,10 +1,32 @@
 {% extends "base.html" %}
 {% block title %}Sign in | PropertyPost{% endblock %}
-{% block content %}<div class="container py-5"><div class="row justify-content-center"><div class="col-12 col-md-7 col-lg-5">
-<div class="card border-0 shadow-sm"><div class="card-body p-4 p-md-5"><h1 class="h3 mb-2">Welcome back</h1><p class="text-secondary">Sign in to manage your plot adverts.</p>
-{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
-<form method="post">{% csrf_token %}
-<div class="mb-3"><label class="form-label" for="username">Username</label><input class="form-control" id="username" name="username" autocomplete="username" required></div>
-<div class="mb-4"><label class="form-label" for="password">Password</label><input class="form-control" id="password" name="password" type="password" autocomplete="current-password" required></div>
-<button class="btn btn-primary w-100" type="submit">Sign in</button></form></div></div></div></div></div>
+{% block content %}
+<div class="container page-shell">
+  <div class="row justify-content-center">
+    <div class="col-12 col-xl-10">
+      <div class="card login-card">
+        <div class="row g-0">
+          <div class="col-md-5 login-aside d-flex flex-column justify-content-between p-4 p-lg-5">
+            <div><p class="eyebrow text-warning">PROPERTYPOST</p><h1 class="display-6 fw-bold lh-sm mb-3">Every plot has a story. Make yours stand out.</h1><p class="mb-0">Keep your listings, photos, adverts and posting results together in one place.</p></div>
+            <p class="small mb-0 mt-4">Your private notes stay visible only to you.</p>
+          </div>
+          <div class="col-md-7">
+            <div class="p-4 p-md-5">
+              <p class="eyebrow">BROKER SIGN IN</p>
+              <h2 class="page-title h2">Welcome back</h2>
+              <p class="page-intro mb-4">Sign in to manage your plot adverts.</p>
+              {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+              <form method="post">{% csrf_token %}
+                <div class="mb-3"><label class="form-label" for="username">Username</label><input class="form-control" id="username" name="username" autocomplete="username" required autofocus></div>
+                <div class="mb-4"><label class="form-label" for="password">Password</label><input class="form-control" id="password" name="password" type="password" autocomplete="current-password" required></div>
+                <button class="btn btn-primary w-100" type="submit">Sign in</button>
+              </form>
+              <p class="small text-secondary mt-4 mb-0">Need an account? Ask your PropertyPost administrator.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}

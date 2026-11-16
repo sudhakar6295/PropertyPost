@@ -10,6 +10,16 @@ the twelve allow-listed public fields fetched from the signed automation-input e
 PropertyPost validates `headline`, `caption`, and `hashtags`, then creates the poster from
 the selected main photo with Pillow. Private owner and negotiation fields are never sent.
 
+The broker chooses the advert language on **Create advert**; English is the default.
+The signed automation input includes that public language code for Make's prompt. The
+saved advert and its archived versions retain the chosen language. One request creates
+one advert; to make another language, the broker starts another advert revision.
+The deterministic local fallback caption remains English for offline development.
+
+Google Maps location picking is deferred. The no-charge Maps Embed API displays a map
+but does not capture a chosen location; an interactive place picker may incur charges.
+Manual location entry keeps this workflow within the infrastructure budget.
+
 The Gemini Developer API pricing page currently lists Flash-Lite at $0.10 per million
 input text tokens and $0.40 per million output tokens, and lists a free tier. For example,
 1,000 captions averaging 1,000 input tokens and 300 output tokens would be about $0.22 at

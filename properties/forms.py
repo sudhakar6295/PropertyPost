@@ -1,5 +1,6 @@
 """Broker forms with the public/private boundary visible in the interface."""
 
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 from django import forms
@@ -8,6 +9,37 @@ from django.core.exceptions import ValidationError
 from .captions import validate_caption
 from .models import AdvertDraft, OpenPlotListing, OpenPlotPrivateDetails, PlotPhoto
 from .posters import TEMPLATES
+
+COUNTRY_CODES = (
+    ("+91", "🇮🇳 India +91"),
+    ("+971", "🇦🇪 UAE +971"),
+    ("+44", "🇬🇧 UK +44"),
+    ("+1", "🇺🇸 USA/Canada +1"),
+)
+LOCAL_PHONE_LENGTHS = {"+91": 10, "+971": 9, "+44": 10, "+1": 10}
+
+
+def _phone_parts(number: str) -> tuple[str, str]:
+    for code, _ in sorted(COUNTRY_CODES, key=lambda item: len(item[0]), reverse=True):
+        if number.startswith(code):
+            return code, number[len(code) :]
+    return "+91", number
+
+
+def _international_phone(raw: str, country_code: str) -> str:
+    value = "".join(character for character in raw if character not in " ()-.")
+    if value.startswith("+"):
+        number = value  # Accept existing E.164 values from older forms.
+    elif value.isdecimal():
+        number = f"{country_code}{value}"
+    else:
+        raise ValidationError("Enter a valid phone number using digits only.")
+    if not number[1:].isdecimal() or not 8 <= len(number[1:]) <= 15:
+        raise ValidationError("Enter a valid phone number for the selected country.")
+    code, local = _phone_parts(number)
+    if code not in LOCAL_PHONE_LENGTHS or len(local) != LOCAL_PHONE_LENGTHS[code]:
+        raise ValidationError("Enter a valid phone number for the selected country.")
+    return number
 
 
 class BootstrapFormMixin:
@@ -19,6 +51,11 @@ class BootstrapFormMixin:
 
 
 class PlotForm(BootstrapFormMixin, forms.ModelForm):
+    contact_number = forms.CharField(label="Number shown to buyers", max_length=20)
+    contact_country_code = forms.ChoiceField(
+        choices=COUNTRY_CODES, label="Country code", initial="+91", required=False
+    )
+
     class Meta:
         model = OpenPlotListing
         fields = (
@@ -28,7 +65,6 @@ class PlotForm(BootstrapFormMixin, forms.ModelForm):
             "area",
             "area_unit",
             "total_price",
-            "price_per_unit",
             "facing",
             "road_width_ft",
             "approval_type",
@@ -38,16 +74,49 @@ class PlotForm(BootstrapFormMixin, forms.ModelForm):
         labels = {
             "road_width_ft": "Road width (feet)",
             "total_price": "Total price (₹)",
-            "price_per_unit": "Price per area unit (₹, optional)",
             "contact_number": "Number shown to buyers",
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if not self.is_bound and self.instance.contact_number:
+            country, local = _phone_parts(self.instance.contact_number)
+            self.initial["contact_country_code"] = country
+            self.initial["contact_number"] = local
+        self.fields["contact_number"].widget.attrs.update(
+            {"inputmode": "tel", "autocomplete": "tel-national", "placeholder": "98765 43210"}
+        )
+        self.fields["road_width_ft"].required = False
+        self.fields["language"].required = False
         self.style_fields()
+
+    def clean(self):
+        cleaned = super().clean()
+        cleaned["language"] = (
+            cleaned.get("language") or self.instance.language or OpenPlotListing.Language.ENGLISH
+        )
+        if cleaned.get("contact_number"):
+            try:
+                cleaned["contact_number"] = _international_phone(
+                    cleaned["contact_number"], cleaned.get("contact_country_code") or "+91"
+                )
+            except ValidationError as exc:
+                self.add_error("contact_number", exc)
+        area = cleaned.get("area")
+        total = cleaned.get("total_price")
+        if area and total:
+            self.instance.price_per_unit = (Decimal(total) / area).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+        return cleaned
 
 
 class PrivateDetailsForm(BootstrapFormMixin, forms.ModelForm):
+    owner_phone = forms.CharField(label="Owner phone", max_length=20)
+    owner_country_code = forms.ChoiceField(
+        choices=COUNTRY_CODES, label="Country code", initial="+91", required=False
+    )
+
     class Meta:
         model = OpenPlotPrivateDetails
         fields = ("owner_name", "owner_phone", "internal_notes", "negotiable_amount")
@@ -56,7 +125,25 @@ class PrivateDetailsForm(BootstrapFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if not self.is_bound and self.instance.owner_phone:
+            country, local = _phone_parts(self.instance.owner_phone)
+            self.initial["owner_country_code"] = country
+            self.initial["owner_phone"] = local
+        self.fields["owner_phone"].widget.attrs.update(
+            {"inputmode": "tel", "autocomplete": "tel-national", "placeholder": "98765 43210"}
+        )
         self.style_fields()
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("owner_phone"):
+            try:
+                cleaned["owner_phone"] = _international_phone(
+                    cleaned["owner_phone"], cleaned.get("owner_country_code") or "+91"
+                )
+            except ValidationError as exc:
+                self.add_error("owner_phone", exc)
+        return cleaned
 
 
 class PhotoForm(BootstrapFormMixin, forms.ModelForm):
@@ -111,7 +198,16 @@ class PhotoForm(BootstrapFormMixin, forms.ModelForm):
 
 class GenerateForm(forms.Form):
     template = forms.ChoiceField(choices=[(name, name.title()) for name in TEMPLATES])
+    language = forms.ChoiceField(
+        choices=OpenPlotListing.Language.choices,
+        label="Advert language",
+        initial=OpenPlotListing.Language.ENGLISH,
+        required=False,
+    )
     logo = forms.FileField(required=False, help_text="Optional PNG or JPEG logo, up to 1 MB")
+
+    def clean_language(self):
+        return self.cleaned_data["language"] or OpenPlotListing.Language.ENGLISH
 
     def clean_logo(self):
         logo = self.cleaned_data["logo"]

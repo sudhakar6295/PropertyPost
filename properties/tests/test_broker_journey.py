@@ -204,7 +204,7 @@ def test_create_posting_sends_make_event_once_and_marks_generation_pending(
             reverse("generate-advert", args=[plot.public_id]), {"template": "classic"}
         )
         assert response.status_code == 202
-        assert b"Make.com is creating your advert" in response.content
+        assert b"Your advert is in progress" in response.content
         assert b"Confidential broker notes" not in response.content
         repeated = client.post(
             reverse("generate-advert", args=[plot.public_id]), {"template": "classic"}
