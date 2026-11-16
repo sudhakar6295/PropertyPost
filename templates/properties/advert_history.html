@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Advert history | PropertyPost{% endblock %}
+{% block content %}
+<div class="container py-5">
+  <div class="d-flex flex-wrap justify-content-between gap-2 align-items-center mb-4">
+    <div><h1 class="h2 mb-1">Advert history</h1><p class="text-secondary mb-0">{{ plot.title }}</p></div>
+    <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">My plots</a>
+  </div>
+  {% if current %}
+  <section class="card shadow-sm mb-3"><div class="card-body">
+    <h2 class="h5">Current version {{ current.version_number }} · {{ plot.get_status_display }}</h2>
+    <p class="fw-semibold">{{ current.headline }}</p><p>{{ current.caption }}</p>
+    <p>{% for tag in current.hashtags %}{{ tag }} {% endfor %}</p>
+    <img class="img-fluid rounded mb-3" style="max-height:320px" src="{% url 'private-poster' plot.public_id %}" alt="Current advert poster">
+    <div>{% if plot.status == 'review' %}<a class="btn btn-primary" href="{% url 'review-details' plot.public_id %}">Review current advert</a>{% else %}<a class="btn btn-primary" href="{% url 'advert-preview' plot.public_id %}">Open current advert</a>{% endif %}</div>
+  </div></section>
+  {% endif %}
+  {% for version in versions %}
+  <section class="card mb-3"><div class="card-body">
+    <h2 class="h5">Earlier version {{ version.version_number }}</h2>
+    <p class="fw-semibold">{{ version.headline }}</p><p>{{ version.caption }}</p>
+    <p>{% for tag in version.hashtags %}{{ tag }} {% endfor %}</p>
+    <img class="img-fluid rounded mb-3" style="max-height:320px" src="{% url 'version-poster' plot.public_id version.version_number %}" alt="Earlier advert poster">
+    {% if version.publication_results %}<p class="small text-secondary mb-0">Published: {% for platform, post_id in version.publication_results.items %}{{ platform|title }} ({{ post_id }}) {% endfor %}</p>{% endif %}
+  </div></section>
+  {% empty %}{% if not current %}<p>No advert has been created yet.</p>{% endif %}{% endfor %}
+</div>
+{% endblock %}

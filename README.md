@@ -103,3 +103,7 @@ separate models and database tables. Hostinger MySQL is the production database;
 MySQL 8 runs in Docker Compose with a persistent named volume. No PostgreSQL, Cloud SQL,
 Firestore or SQLite runtime configuration is used. Private data must never be exposed by
 public views, templates, serializers, logs, or integrations.
+
+### Saved advert workflow
+
+A broker can reopen an advert from **My plots** after leaving or refreshing the app. **Advert history** keeps earlier generated and published versions. Editing an already published advert starts a new review version while preserving the old post IDs; publishing the revised version creates a new post. Make generation requests time out after `MAKE_JOB_TIMEOUT_SECONDS` (default 900) so the broker can retry. An unconfirmed publication remains visible as pending, because retrying without checking the social platform could duplicate a post. See [advert generation](docs/advert-generation.md).

@@ -1,11 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Advert publishing | PropertyPost{% endblock %}
+{% block title %}Advert posting | PropertyPost{% endblock %}
 {% block content %}
-<div class="container py-5"><div class="row justify-content-center"><div class="col-12 col-md-8 text-center"><div class="card border-0 shadow-sm"><div class="card-body p-5">
+<div class="container py-5"><div class="row justify-content-center"><div class="col-12 col-lg-8">
+<h1 class="h2">{{ plot.title }}</h1>
 {% if plot.status == 'publishing' %}
-<div class="display-4 text-primary mb-3">…</div><h1 class="h2">Your advert is being posted</h1><p class="text-secondary">{{ plot.title }} is being sent to {% for platform in plot.publication_platforms %}{% if not forloop.first %} and {% endif %}{{ platform|title }}{% endfor %}. Refresh after Make.com confirms the result.</p><a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">Back to my plots</a>
-{% else %}
-<div class="display-4 text-success mb-3">✓</div><h1 class="h2">Your advert is published</h1><p class="text-secondary">{{ plot.title }} is now posted to {% for platform in plot.publication_platforms %}{% if not forloop.first %} and {% endif %}{{ platform|title }}{% endfor %}.</p><div class="d-flex flex-wrap justify-content-center gap-2"><a class="btn btn-primary" href="{% url 'properties:list' %}">View public adverts</a><a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">Back to my plots</a></div>
+<div class="alert alert-info" role="status"><h2 class="h5">Your advert is being posted</h2><p class="mb-0">You can leave this page. Come back to see the result.</p></div>
+{% elif plot.status == 'published' %}
+<div class="alert alert-success"><h2 class="h5">Your advert is published</h2><p class="mb-0">The posting details are saved here.</p></div>
 {% endif %}
-</div></div></div></div></div>
+{% if plot.publication_results %}
+<div class="card mb-4"><div class="card-body"><h2 class="h5">Posting results</h2>
+{% for platform, post_id in plot.publication_results.items %}<p class="mb-2">{{ platform|title }}: {{ post_id }}</p>{% endfor %}
+</div></div>
+{% endif %}
+<div class="d-flex flex-wrap gap-2">
+<a class="btn btn-outline-primary" href="{% url 'advert-preview' plot.public_id %}">View advert</a>
+<a class="btn btn-outline-secondary" href="{% url 'advert-history' plot.public_id %}">Advert history</a>
+{% if plot.status == 'published' %}<form method="post" action="{% url 'revise-published-advert' plot.public_id %}">{% csrf_token %}<button class="btn btn-primary" type="submit">Edit this advert</button></form>{% endif %}
+<a class="btn btn-link" href="{% url 'dashboard' %}">My plots</a>
+</div></div></div></div>
+{% if plot.status == 'publishing' %}
+<script>
+(() => {
+  const check = async () => {
+    try {
+      const response = await fetch("{{ publication_status_url }}", {headers: {Accept: "application/json"}, cache: "no-store"});
+      if (!response.ok) return;
+      const result = await response.json();
+      if (result.status === "published" || result.status === "failed") {
+        window.location.assign(result.next_url);
+      } else if (result.unconfirmed) {
+        document.querySelector("[role=status]").textContent = "Posting has not been confirmed. Check your Facebook or Instagram page before trying again.";
+        window.clearInterval(timer);
+      }
+    } catch (_) { /* Retry while the connection is unavailable. */ }
+  };
+  const timer = window.setInterval(check, 4000);
+  check();
+})();
+</script>
+{% endif %}
 {% endblock %}

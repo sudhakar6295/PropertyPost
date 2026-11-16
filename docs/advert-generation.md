@@ -21,3 +21,11 @@ Generation moves a listing through `generating` and `review`; a failure marks it
 The broker can edit and approve the result before the status becomes `approved`. Only the
 broker's Publish action asks Make to post to the selected Facebook Page. PropertyPost shows
 `published` only after the signed Make callback confirms Facebook's post ID.
+
+## Saved adverts and revisions
+
+Each Make request has a durable AutomationJob row and a unique request ID. The signed generation callback validates and saves the advert before the listing enters review. Brokers can leave, refresh, and later reopen the saved result from the dashboard. A pending generation with no callback after MAKE_JOB_TIMEOUT_SECONDS (default 900) becomes retryable when its status is checked.
+
+The current AdvertDraft holds the editable version. Before listing details, photos, or an existing advert are revised, PropertyPost copies the earlier advert into AdvertVersion, including its poster object path and any external post IDs. Historical versions remain private to the listing's broker. Changing only private owner notes does not invalidate the advert. Published adverts can be revised through Edit this advert; approval of the new version is required before publishing it as a new post. Earlier external posts are not edited or deleted.
+
+Publication jobs record pending, succeeded, or failed state. A partial failure retains successful platform post IDs so a retry targets only missing platforms. If Make never sends a publication callback, the app continues to show an unconfirmed posting state; the broker must check the platform before retrying to avoid duplicate posts.

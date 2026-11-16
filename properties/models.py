@@ -157,6 +157,7 @@ class PlotPhoto(models.Model):
 
 class AdvertDraft(models.Model):
     listing = models.OneToOneField(OpenPlotListing, on_delete=models.CASCADE, related_name="advert")
+    version_number = models.PositiveIntegerField(default=1)
     template = models.CharField(max_length=16)
     poster_path = models.CharField(max_length=300)
     headline = models.CharField(max_length=100)
@@ -166,6 +167,58 @@ class AdvertDraft(models.Model):
 
     def __str__(self) -> str:
         return self.headline
+
+
+class AdvertVersion(models.Model):
+    """An immutable copy of an advert before a broker starts a revision."""
+
+    listing = models.ForeignKey(
+        OpenPlotListing, on_delete=models.CASCADE, related_name="advert_versions"
+    )
+    version_number = models.PositiveIntegerField()
+    template = models.CharField(max_length=16)
+    poster_path = models.CharField(max_length=300)
+    headline = models.CharField(max_length=100)
+    caption = models.TextField(max_length=1000)
+    hashtags = models.JSONField(default=list)
+    public_details = models.JSONField(default=dict)
+    publication_results = models.JSONField(default=dict)
+    archived_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-version_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("listing", "version_number"), name="unique_advert_version"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Advert version {self.version_number} for {self.listing_id}"
+
+
+class AutomationJob(models.Model):
+    """Durable status for each Make request, including failures and retries."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+
+    class Kind(models.TextChoices):
+        GENERATION = "generation", "Generation"
+        PUBLICATION = "publication", "Publication"
+
+    listing = models.ForeignKey(OpenPlotListing, on_delete=models.CASCADE, related_name="jobs")
+    kind = models.CharField(max_length=12, choices=Kind.choices)
+    request_id = models.UUIDField(unique=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    error_code = models.CharField(max_length=40, blank=True)
+
+    def __str__(self) -> str:
+        return f"{self.kind} {self.request_id}"
 
 
 class AutomationReceipt(models.Model):

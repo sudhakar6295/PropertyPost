@@ -53,6 +53,17 @@ urlpatterns = [
         name="private-photo",
     ),
     path("plots/<uuid:public_id>/review/", broker_views.review_details, name="review-details"),
+    path(
+        "plots/<uuid:public_id>/revise/",
+        broker_views.revise_published_advert,
+        name="revise-published-advert",
+    ),
+    path("plots/<uuid:public_id>/history/", broker_views.advert_history, name="advert-history"),
+    path(
+        "plots/<uuid:public_id>/history/<int:version_number>/poster/",
+        broker_views.version_poster,
+        name="version-poster",
+    ),
     path("plots/<uuid:public_id>/generate/", broker_views.generate_advert, name="generate-advert"),
     path(
         "plots/<uuid:public_id>/generation-status/",
@@ -66,6 +77,11 @@ urlpatterns = [
         "plots/<uuid:public_id>/published/",
         broker_views.published_result,
         name="published-result",
+    ),
+    path(
+        "plots/<uuid:public_id>/publication-status/",
+        broker_views.publication_status,
+        name="publication-status",
     ),
     path("", include("properties.urls")),
 ]

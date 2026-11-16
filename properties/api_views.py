@@ -14,8 +14,9 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 
+from .advert_versions import finish_job, next_version_number
 from .captions import validate_generated_caption
-from .models import AdvertDraft, AutomationReceipt, OpenPlotListing, PlotPhoto
+from .models import AdvertDraft, AutomationJob, AutomationReceipt, OpenPlotListing, PlotPhoto
 from .posters import render_poster
 from .repositories.django import _to_public_domain
 from .serializers import serialize_public_details
@@ -192,6 +193,13 @@ def _generation(listing, data):
             return _error("Invalid error message", 400)
         listing.status = OpenPlotListing.Status.FAILED
         listing.save(update_fields=["status", "updated_at"])
+        finish_job(
+            listing,
+            AutomationJob.Kind.GENERATION,
+            data["request_id"],
+            succeeded=False,
+            error_code="provider_failed",
+        )
         return {"request_id": data["request_id"], "status": "failed"}
     if set(data) != {"request_id", "status", "headline", "caption", "hashtags", "template"}:
         return _error("Invalid generation result fields", 400)
@@ -228,11 +236,19 @@ def _generation(listing, data):
         )
         listing.status = OpenPlotListing.Status.FAILED
         listing.save(update_fields=["status", "updated_at"])
+        finish_job(
+            listing,
+            AutomationJob.Kind.GENERATION,
+            data["request_id"],
+            succeeded=False,
+            error_code="poster_failed",
+        )
         return {"request_id": data["request_id"], "status": "failed"}
     AdvertDraft.objects.update_or_create(
         listing=listing,
         defaults={
             "template": template,
+            "version_number": next_version_number(listing),
             "poster_path": path,
             "headline": caption.headline,
             "caption": caption.caption,
@@ -241,6 +257,7 @@ def _generation(listing, data):
     )
     listing.status = OpenPlotListing.Status.REVIEW
     listing.save(update_fields=["status", "updated_at"])
+    finish_job(listing, AutomationJob.Kind.GENERATION, data["request_id"], succeeded=True)
     return {"request_id": data["request_id"], "status": "review"}
 
 
@@ -274,6 +291,13 @@ def _publication(listing, data):
         listing.publication_results = {**listing.publication_results, **partial_posts}
         listing.status = OpenPlotListing.Status.FAILED
         listing.save(update_fields=["status", "publication_results", "updated_at"])
+        finish_job(
+            listing,
+            AutomationJob.Kind.PUBLICATION,
+            data["request_id"],
+            succeeded=False,
+            error_code="platform_failed",
+        )
         return {
             "request_id": data["request_id"],
             "status": "failed",
@@ -305,6 +329,7 @@ def _publication(listing, data):
     listing.publication_results = results
     listing.status = OpenPlotListing.Status.PUBLISHED
     listing.save(update_fields=["status", "publication_results", "updated_at"])
+    finish_job(listing, AutomationJob.Kind.PUBLICATION, data["request_id"], succeeded=True)
     return {
         "request_id": data["request_id"],
         "status": "published",

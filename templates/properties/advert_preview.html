@@ -2,9 +2,10 @@
 {% block title %}Advert preview | PropertyPost{% endblock %}
 {% block content %}
 <div class="container py-5"><div class="row justify-content-center"><div class="col-12 col-lg-9">
-<h1 class="h2">Advert preview</h1><p class="text-secondary">This is the poster and text you approved.</p>
+<h1 class="h2">Advert preview</h1><div class="d-flex flex-wrap gap-2 mb-3"><a class="btn btn-outline-secondary btn-sm" href="{% url 'advert-history' plot.public_id %}">Advert history</a>{% if plot.status == 'published' %}<form method="post" action="{% url 'revise-published-advert' plot.public_id %}">{% csrf_token %}<button class="btn btn-outline-primary btn-sm" type="submit">Edit this advert</button></form>{% endif %}</div><p class="text-secondary">This is the poster and text you approved.</p>
 <div class="row g-4"><div class="col-md-6"><img class="img-fluid rounded shadow-sm" src="{% url 'private-poster' plot.public_id %}" alt="Poster for {{ plot.title }}"></div>
 <div class="col-md-6"><h2 class="h3">{{ plot.advert.headline }}</h2><p>{{ plot.advert.caption }}</p><p class="text-primary">{% for tag in plot.advert.hashtags %}{{ tag }} {% endfor %}</p>
+{% if plot.publication_results %}<div class="alert alert-success"><strong>Already posted:</strong> {% for platform, post_id in plot.publication_results.items %}{{ platform|title }} ({{ post_id }}) {% endfor %}</div>{% endif %}
 {% if publication_enabled and plot.status == 'approved' or publication_enabled and plot.status == 'failed' and plot.publication_request_id %}
 <form method="post" action="{% url 'publish-plot' plot.public_id %}" class="mt-3">{% csrf_token %}
 <label class="form-label" for="{{ publication_form.platform.id_for_label }}">{{ publication_form.platform.label }}</label>

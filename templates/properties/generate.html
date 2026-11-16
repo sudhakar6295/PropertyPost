@@ -3,6 +3,7 @@
 {% block content %}
 <div class="container py-5"><div class="row justify-content-center"><div class="col-12 col-lg-8">
 <h1 class="h2">Create posting</h1><p class="text-secondary">We use the main photo and the advert details you have entered.</p>
+{% if plot.status == 'failed' %}<div class="alert alert-warning">Advert creation did not finish. You can try again.</div>{% endif %}
 {% if request_pending %}
 <div id="generation-progress" class="alert alert-info" role="status" data-status-url="{{ generation_status_url }}">
   Make.com is creating your advert. This page will open the saved result when it is ready.

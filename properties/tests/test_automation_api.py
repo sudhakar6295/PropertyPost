@@ -11,7 +11,13 @@ from django.urls import reverse
 from PIL import Image
 
 from properties.api_views import _image_signature
-from properties.models import AutomationReceipt, OpenPlotListing, OpenPlotPrivateDetails, PlotPhoto
+from properties.models import (
+    AutomationJob,
+    AutomationReceipt,
+    OpenPlotListing,
+    OpenPlotPrivateDetails,
+    PlotPhoto,
+)
 from properties.services import object_store
 from properties.tests.test_views import create_listing
 
@@ -103,6 +109,11 @@ def test_automation_input_only_serves_a_pending_generation(client, listing):
 
 @pytest.mark.django_db
 def test_generation_callback_is_validated_and_idempotent(client, listing):
+    AutomationJob.objects.create(
+        listing=listing,
+        kind=AutomationJob.Kind.GENERATION,
+        request_id=listing.generation_request_id,
+    )
     path = reverse("generation-result", args=[listing.public_id])
     payload = {
         "request_id": str(listing.generation_request_id),
@@ -120,6 +131,7 @@ def test_generation_callback_is_validated_and_idempotent(client, listing):
     assert first.status_code == 200
     assert signed_request(client, "POST", path, payload).json() == first.json()
     assert AutomationReceipt.objects.filter(listing=listing).count() == 1
+    assert AutomationJob.objects.get(request_id=listing.generation_request_id).status == "succeeded"
     assert OpenPlotListing.objects.get(pk=listing.pk).status == OpenPlotListing.Status.REVIEW
     advert = listing.advert
     assert advert.template == "minimal"
@@ -136,12 +148,16 @@ def test_publication_retry_does_not_create_second_post(client, listing):
     request_id = uuid4()
     listing.publication_request_id = request_id
     listing.save(update_fields=["status", "publication_request_id"])
+    AutomationJob.objects.create(
+        listing=listing, kind=AutomationJob.Kind.PUBLICATION, request_id=request_id
+    )
     path = reverse("publication-result", args=[listing.public_id])
     payload = {"request_id": str(request_id), "status": "succeeded", "external_post_id": "post-42"}
     first = signed_request(client, "POST", path, payload)
     assert first.status_code == 200
     assert signed_request(client, "POST", path, payload).json() == first.json()
     assert AutomationReceipt.objects.filter(listing=listing, kind="publication").count() == 1
+    assert AutomationJob.objects.get(request_id=request_id).status == "succeeded"
 
 
 @pytest.mark.django_db

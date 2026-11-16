@@ -2,6 +2,7 @@
 
 import logging
 import time
+from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -12,8 +13,10 @@ from django.db import DatabaseError, transaction
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
+from .advert_versions import archive_current, finish_job, next_version_number
 from .api_views import _poster_signature
 from .captions import GeminiCaptionProvider, LocalCaptionProvider
 from .forms import (
@@ -25,7 +28,14 @@ from .forms import (
     PublicationForm,
 )
 from .make_webhook import MakeWebhookError, trigger_generation, trigger_publication
-from .models import AdvertDraft, OpenPlotListing, OpenPlotPrivateDetails, PlotPhoto
+from .models import (
+    AdvertDraft,
+    AdvertVersion,
+    AutomationJob,
+    OpenPlotListing,
+    OpenPlotPrivateDetails,
+    PlotPhoto,
+)
 from .posters import render_poster
 from .repositories.django import _to_public_domain
 from .serializers import serialize_public_details
@@ -61,6 +71,32 @@ def owned_plot(request, public_id):
     return get_object_or_404(OpenPlotListing, public_id=public_id, broker=request.user)
 
 
+def invalidate_advert(listing):
+    """Start a new draft while preserving the advert that was already shown or posted."""
+    archive_current(listing)
+    AdvertDraft.objects.filter(listing=listing).delete()
+    AutomationJob.objects.filter(listing=listing, status=AutomationJob.Status.PENDING).update(
+        status=AutomationJob.Status.FAILED,
+        completed_at=timezone.now(),
+        error_code="listing_changed",
+    )
+    listing.status = OpenPlotListing.Status.DRAFT
+    listing.generation_request_id = None
+    listing.publication_request_id = None
+    listing.publication_platforms = []
+    listing.publication_results = {}
+    listing.save(
+        update_fields=[
+            "status",
+            "generation_request_id",
+            "publication_request_id",
+            "publication_platforms",
+            "publication_results",
+            "updated_at",
+        ]
+    )
+
+
 @login_required
 def dashboard(request):
     listings = OpenPlotListing.objects.filter(broker=request.user).order_by("-updated_at")
@@ -80,17 +116,21 @@ def save_plot(request, plot=None):
     if request.method == "POST" and public_form.is_valid() and private_form.is_valid():
         try:
             with transaction.atomic():
+                if plot and public_form.has_changed():
+                    archive_current(
+                        OpenPlotListing.objects.select_for_update().get(
+                            pk=plot.pk, broker=request.user
+                        )
+                    )
                 listing = public_form.save(commit=False)
                 listing.broker = request.user
-                if plot and listing.status != OpenPlotListing.Status.DRAFT:
-                    listing.status = OpenPlotListing.Status.DRAFT
                 listing.save()
                 details = private_form.save(commit=False)
                 details.listing = listing
                 details.full_clean()
                 details.save()
-                if plot:
-                    AdvertDraft.objects.filter(listing=listing).delete()
+                if plot and public_form.has_changed():
+                    invalidate_advert(listing)
         except DatabaseError as exc:
             logger.error(
                 "Plot save failed",
@@ -127,22 +167,16 @@ def add_plot(request):
 @login_required
 def edit_plot(request, public_id):
     plot = owned_plot(request, public_id)
-    if request.method == "POST" and plot.status in {
-        OpenPlotListing.Status.PUBLISHING,
-        OpenPlotListing.Status.PUBLISHED,
-    }:
-        return HttpResponseBadRequest("Published plots cannot be changed.")
+    if request.method == "POST" and plot.status == OpenPlotListing.Status.PUBLISHING:
+        return HttpResponseBadRequest("Wait until posting finishes before changing this plot.")
     return save_plot(request, plot)
 
 
 @login_required
 def upload_photos(request, public_id):
     plot = owned_plot(request, public_id)
-    if request.method == "POST" and plot.status in {
-        OpenPlotListing.Status.PUBLISHING,
-        OpenPlotListing.Status.PUBLISHED,
-    }:
-        return HttpResponseBadRequest("Published plots cannot be changed.")
+    if request.method == "POST" and plot.status == OpenPlotListing.Status.PUBLISHING:
+        return HttpResponseBadRequest("Wait until posting finishes before changing photos.")
     form = PhotoForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
         photo = form.save(commit=False)
@@ -157,9 +191,8 @@ def upload_photos(request, public_id):
         object_store().upload(photo.object_path, uploaded.read(), photo.content_type)
         photo.image = ""
         photo.save()
-        AdvertDraft.objects.filter(listing=plot).delete()
-        plot.status = OpenPlotListing.Status.DRAFT
-        plot.save(update_fields=["status", "updated_at"])
+        with transaction.atomic():
+            invalidate_advert(plot)
         return redirect("upload-photos", public_id=public_id)
     return render(request, "properties/photos.html", {"plot": plot, "form": form})
 
@@ -168,8 +201,8 @@ def upload_photos(request, public_id):
 @require_POST
 def arrange_photos(request, public_id):
     plot = owned_plot(request, public_id)
-    if plot.status in {OpenPlotListing.Status.PUBLISHING, OpenPlotListing.Status.PUBLISHED}:
-        return HttpResponseBadRequest("Published plots cannot be changed.")
+    if plot.status == OpenPlotListing.Status.PUBLISHING:
+        return HttpResponseBadRequest("Wait until posting finishes before changing photos.")
     ids = list(plot.photos.values_list("pk", flat=True))
     try:
         ordered = [int(value) for value in request.POST.getlist("photo_order")]
@@ -181,9 +214,7 @@ def arrange_photos(request, public_id):
     with transaction.atomic():
         for position, photo_id in enumerate(ordered):
             plot.photos.filter(pk=photo_id).update(sort_order=position, is_main=photo_id == main_id)
-        AdvertDraft.objects.filter(listing=plot).delete()
-        plot.status = OpenPlotListing.Status.DRAFT
-        plot.save(update_fields=["status", "updated_at"])
+        invalidate_advert(plot)
     return redirect("upload-photos", public_id=public_id)
 
 
@@ -202,6 +233,17 @@ def private_photo(request, public_id, photo_id):
 @login_required
 def review_details(request, public_id):
     plot = owned_plot(request, public_id)
+    if (
+        request.method == "GET"
+        and hasattr(plot, "advert")
+        and plot.status
+        in {
+            OpenPlotListing.Status.APPROVED,
+            OpenPlotListing.Status.PUBLISHING,
+            OpenPlotListing.Status.PUBLISHED,
+        }
+    ):
+        return redirect("advert-preview", public_id=public_id)
     if request.method == "POST":
         if not hasattr(plot, "advert") or plot.status != OpenPlotListing.Status.REVIEW:
             return HttpResponseBadRequest("Generate an advert before approving it.")
@@ -210,9 +252,18 @@ def review_details(request, public_id):
             advert = form.save(commit=False)
             advert.hashtags = form.cleaned_data["hashtags"]
             advert.save()
-            plot.status = OpenPlotListing.Status.APPROVED
+            plot.status = (
+                OpenPlotListing.Status.REVIEW
+                if request.POST.get("intent") == "save"
+                else OpenPlotListing.Status.APPROVED
+            )
             plot.save(update_fields=["status", "updated_at"])
-            return redirect("advert-preview", public_id=public_id)
+            return redirect(
+                "review-details"
+                if plot.status == OpenPlotListing.Status.REVIEW
+                else "advert-preview",
+                public_id=public_id,
+            )
     else:
         form = AdvertEditForm(instance=plot.advert) if hasattr(plot, "advert") else None
     return render(
@@ -227,10 +278,87 @@ def review_details(request, public_id):
 
 
 @login_required
-def generate_advert(request, public_id):
+@require_POST
+def revise_published_advert(request, public_id):
     plot = owned_plot(request, public_id)
-    if plot.status == OpenPlotListing.Status.REVIEW and hasattr(plot, "advert"):
-        return redirect("review-details", public_id=public_id)
+    with transaction.atomic():
+        plot = OpenPlotListing.objects.select_for_update().get(pk=plot.pk, broker=request.user)
+        if plot.status != OpenPlotListing.Status.PUBLISHED or not hasattr(plot, "advert"):
+            return HttpResponseBadRequest("Only a published advert can be revised here.")
+        archive_current(plot)
+        advert = plot.advert
+        advert.version_number = next_version_number(plot)
+        advert.save(update_fields=["version_number", "updated_at"])
+        plot.status = OpenPlotListing.Status.REVIEW
+        plot.publication_request_id = None
+        plot.publication_platforms = []
+        plot.publication_results = {}
+        plot.save(
+            update_fields=[
+                "status",
+                "publication_request_id",
+                "publication_platforms",
+                "publication_results",
+                "updated_at",
+            ]
+        )
+    return redirect("review-details", public_id=public_id)
+
+
+@login_required
+def advert_history(request, public_id):
+    plot = owned_plot(request, public_id)
+    return render(
+        request,
+        "properties/advert_history.html",
+        {
+            "plot": plot,
+            "versions": plot.advert_versions.all(),
+            "current": AdvertDraft.objects.filter(listing=plot).first(),
+        },
+    )
+
+
+@login_required
+def version_poster(request, public_id, version_number):
+    plot = owned_plot(request, public_id)
+    version = get_object_or_404(AdvertVersion, listing=plot, version_number=version_number)
+    response = HttpResponse(object_store().download(version.poster_path), content_type="image/png")
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+def expire_generation(listing):
+    """Release a broker from a Make request that never sent a callback."""
+    if listing.status != OpenPlotListing.Status.GENERATING:
+        return listing
+    with transaction.atomic():
+        listing = OpenPlotListing.objects.select_for_update().get(pk=listing.pk)
+        job = AutomationJob.objects.filter(
+            listing=listing,
+            kind=AutomationJob.Kind.GENERATION,
+            request_id=listing.generation_request_id,
+            status=AutomationJob.Status.PENDING,
+        ).first()
+        if job and job.requested_at <= timezone.now() - timedelta(
+            seconds=settings.MAKE_JOB_TIMEOUT_SECONDS
+        ):
+            listing.status = OpenPlotListing.Status.FAILED
+            listing.save(update_fields=["status", "updated_at"])
+            finish_job(
+                listing,
+                AutomationJob.Kind.GENERATION,
+                job.request_id,
+                succeeded=False,
+                error_code="callback_timeout",
+            )
+    return listing
+
+
+@login_required
+def generate_advert(request, public_id):
+    plot = expire_generation(owned_plot(request, public_id))
     form = GenerateForm(request.POST or None, request.FILES or None)
     has_main_photo = plot.photos.filter(is_main=True).exists()
     make_enabled = bool(settings.MAKE_WEBHOOK_URL)
@@ -244,6 +372,8 @@ def generate_advert(request, public_id):
             form.add_error(None, "This advert is already being created. Please wait.")
         elif plot.status in {OpenPlotListing.Status.PUBLISHING, OpenPlotListing.Status.PUBLISHED}:
             return HttpResponseBadRequest("Publishing or published adverts cannot be regenerated.")
+        elif plot.status == OpenPlotListing.Status.FAILED and plot.publication_request_id:
+            return redirect("advert-preview", public_id=public_id)
         elif not make_enabled and not settings.DEBUG:
             form.add_error(
                 None,
@@ -278,16 +408,25 @@ def generate_advert(request, public_id):
                     return HttpResponseBadRequest(
                         "Publishing or published adverts cannot be regenerated."
                     )
+                archive_current(plot)
+                AdvertDraft.objects.filter(listing=plot).delete()
                 plot.status = OpenPlotListing.Status.GENERATING
                 plot.generation_request_id = request_id
                 plot.publication_request_id = None
+                plot.publication_platforms = []
+                plot.publication_results = {}
                 plot.save(
                     update_fields=[
                         "status",
                         "generation_request_id",
                         "publication_request_id",
+                        "publication_platforms",
+                        "publication_results",
                         "updated_at",
                     ]
+                )
+                AutomationJob.objects.create(
+                    listing=plot, kind=AutomationJob.Kind.GENERATION, request_id=request_id
                 )
             try:
                 trigger_generation(
@@ -314,6 +453,13 @@ def generate_advert(request, public_id):
                 if plot.status == OpenPlotListing.Status.GENERATING:
                     plot.status = OpenPlotListing.Status.FAILED
                     plot.save(update_fields=["status", "updated_at"])
+                    finish_job(
+                        plot,
+                        AutomationJob.Kind.GENERATION,
+                        request_id,
+                        succeeded=False,
+                        error_code="trigger_failed",
+                    )
                 form.add_error(None, "Could not send the advert request. Please try again.")
             else:
                 return render(
@@ -360,16 +506,27 @@ def generate_advert(request, public_id):
                     return HttpResponseBadRequest(
                         "Publishing or published adverts cannot be regenerated."
                     )
+                archive_current(plot)
+                AdvertDraft.objects.filter(listing=plot).delete()
                 plot.status = OpenPlotListing.Status.GENERATING
                 plot.generation_request_id = uuid4()
                 plot.publication_request_id = None
+                plot.publication_platforms = []
+                plot.publication_results = {}
                 plot.save(
                     update_fields=[
                         "status",
                         "generation_request_id",
                         "publication_request_id",
+                        "publication_platforms",
+                        "publication_results",
                         "updated_at",
                     ]
+                )
+                AutomationJob.objects.create(
+                    listing=plot,
+                    kind=AutomationJob.Kind.GENERATION,
+                    request_id=plot.generation_request_id,
                 )
             try:
                 details = serialize_public_details(_to_public_domain(plot))
@@ -392,6 +549,7 @@ def generate_advert(request, public_id):
                     listing=plot,
                     defaults={
                         "template": form.cleaned_data["template"],
+                        "version_number": next_version_number(plot),
                         "poster_path": path,
                         "headline": caption.headline,
                         "caption": caption.caption,
@@ -401,10 +559,20 @@ def generate_advert(request, public_id):
             except Exception:
                 plot.status = OpenPlotListing.Status.FAILED
                 plot.save(update_fields=["status", "updated_at"])
+                finish_job(
+                    plot,
+                    AutomationJob.Kind.GENERATION,
+                    plot.generation_request_id,
+                    succeeded=False,
+                    error_code="generation_failed",
+                )
                 form.add_error(None, "Could not make the advert. Please try again.")
             else:
                 plot.status = OpenPlotListing.Status.REVIEW
                 plot.save(update_fields=["status", "updated_at"])
+                finish_job(
+                    plot, AutomationJob.Kind.GENERATION, plot.generation_request_id, succeeded=True
+                )
                 return redirect("review-details", public_id=public_id)
     return render(
         request,
@@ -423,7 +591,7 @@ def generate_advert(request, public_id):
 @login_required
 @require_GET
 def generation_status(request, public_id):
-    plot = owned_plot(request, public_id)
+    plot = expire_generation(owned_plot(request, public_id))
     response = {"status": plot.status}
     if plot.status == OpenPlotListing.Status.REVIEW and hasattr(plot, "advert"):
         response["next_url"] = reverse("review-details", args=[plot.public_id])
@@ -510,6 +678,9 @@ def publish_plot(request, public_id):
                 "updated_at",
             ]
         )
+        AutomationJob.objects.create(
+            listing=plot, kind=AutomationJob.Kind.PUBLICATION, request_id=request_id
+        )
     expires = int(time.time()) + settings.AUTOMATION_IMAGE_TTL_SECONDS
     poster_path = reverse("automation-poster", args=[plot.public_id])
     poster_signature = _poster_signature(plot.public_id, expires)
@@ -542,6 +713,13 @@ def publish_plot(request, public_id):
         if plot.status == OpenPlotListing.Status.PUBLISHING:
             plot.status = OpenPlotListing.Status.FAILED
             plot.save(update_fields=["status", "updated_at"])
+            finish_job(
+                plot,
+                AutomationJob.Kind.PUBLICATION,
+                request_id,
+                succeeded=False,
+                error_code="trigger_failed",
+            )
         return HttpResponse("Could not send the publication request. Please try again.", status=503)
     return redirect("published-result", public_id=public_id)
 
@@ -554,4 +732,40 @@ def published_result(request, public_id):
         OpenPlotListing.Status.PUBLISHING,
     }:
         return redirect("advert-preview", public_id=public_id)
-    return render(request, "properties/published.html", {"plot": plot})
+    return render(
+        request,
+        "properties/published.html",
+        {
+            "plot": plot,
+            "publication_status_url": reverse("publication-status", args=[plot.public_id]),
+        },
+    )
+
+
+@login_required
+@require_GET
+def publication_status(request, public_id):
+    plot = owned_plot(request, public_id)
+    job = (
+        AutomationJob.objects.filter(listing=plot, kind=AutomationJob.Kind.PUBLICATION)
+        .order_by("-requested_at")
+        .first()
+    )
+    unconfirmed = bool(
+        plot.status == OpenPlotListing.Status.PUBLISHING
+        and job
+        and job.requested_at
+        <= timezone.now() - timedelta(seconds=settings.MAKE_JOB_TIMEOUT_SECONDS)
+    )
+    return JsonResponse(
+        {
+            "status": plot.status,
+            "unconfirmed": unconfirmed,
+            "publication_results": plot.publication_results,
+            "next_url": (
+                reverse("advert-preview", args=[plot.public_id])
+                if plot.status == OpenPlotListing.Status.FAILED
+                else reverse("published-result", args=[plot.public_id])
+            ),
+        }
+    )

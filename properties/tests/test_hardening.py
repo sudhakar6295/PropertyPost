@@ -39,10 +39,12 @@ def test_upload_rejects_excessive_dimensions():
 
 
 @pytest.mark.django_db
-def test_published_plot_rejects_edits_and_photo_changes(client, django_user_model):
+def test_published_plot_rejects_incomplete_edits_and_photo_changes(client, django_user_model):
     broker = django_user_model.objects.create_user(username="broker", password="StrongPass123!")
     plot = create_listing("Published", OpenPlotListing.Status.PUBLISHED, broker)
     client.force_login(broker)
-    assert client.post(reverse("edit-plot", args=[plot.public_id]), {}).status_code == 400
-    assert client.post(reverse("upload-photos", args=[plot.public_id]), {}).status_code == 400
+    assert client.post(reverse("edit-plot", args=[plot.public_id]), {}).status_code == 200
+    assert client.post(reverse("upload-photos", args=[plot.public_id]), {}).status_code == 200
     assert client.post(reverse("arrange-photos", args=[plot.public_id]), {}).status_code == 400
+    plot.refresh_from_db()
+    assert plot.status == OpenPlotListing.Status.PUBLISHED
