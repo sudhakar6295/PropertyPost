@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 
-from .captions import validate_caption
+from .captions import validate_generated_caption
 from .models import AdvertDraft, AutomationReceipt, OpenPlotListing, PlotPhoto
 from .posters import render_poster
 from .repositories.django import _to_public_domain
@@ -202,7 +202,9 @@ def _generation(listing, data):
     ):
         return _error("Listing is not awaiting a generation result", 409)
     try:
-        caption = validate_caption({key: data[key] for key in ("headline", "caption", "hashtags")})
+        caption = validate_generated_caption(
+            {key: data[key] for key in ("headline", "caption", "hashtags")}
+        )
     except ValueError:
         return _error("Invalid caption", 400)
     template = data["template"]

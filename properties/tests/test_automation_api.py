@@ -109,7 +109,7 @@ def test_generation_callback_is_validated_and_idempotent(client, listing):
         "status": "succeeded",
         "headline": "A plot",
         "caption": "Good location",
-        "hashtags": ["#Land"],
+        "hashtags": ["#Land", "#Bad Tag"],
         "template": "minimal",
     }
     unsigned = client.post(path, data=json.dumps(payload), content_type="application/json")
@@ -123,6 +123,7 @@ def test_generation_callback_is_validated_and_idempotent(client, listing):
     assert OpenPlotListing.objects.get(pk=listing.pk).status == OpenPlotListing.Status.REVIEW
     advert = listing.advert
     assert advert.template == "minimal"
+    assert advert.hashtags == ["#Land"]
     assert advert.poster_path.startswith(f"posters/{listing.broker_id}/{listing.public_id}/")
     assert advert.poster_path.endswith(f"{payload['request_id']}.png")
     changed = signed_request(client, "POST", path, {**payload, "headline": "Changed"})

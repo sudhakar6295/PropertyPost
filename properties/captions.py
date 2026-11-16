@@ -38,6 +38,16 @@ def validate_caption(value: object) -> Caption:
     return Caption(headline.strip(), body.strip(), tuple(tags))
 
 
+def validate_generated_caption(value: object) -> Caption:
+    """Discard malformed model hashtags while keeping the strict editor validator."""
+    if isinstance(value, dict) and isinstance(value.get("hashtags"), list):
+        value = {
+            **value,
+            "hashtags": [tag for tag in value["hashtags"] if _valid_hashtag(tag)][:8],
+        }
+    return validate_caption(value)
+
+
 def approved_public_details(details: dict) -> dict:
     if set(details) != PUBLIC_DETAIL_FIELDS:
         raise ValueError("Caption input must contain exactly the approved public fields.")

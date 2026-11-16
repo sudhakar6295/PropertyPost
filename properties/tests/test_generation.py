@@ -4,7 +4,12 @@ from io import BytesIO
 import pytest
 from PIL import Image
 
-from properties.captions import GeminiCaptionProvider, LocalCaptionProvider, validate_caption
+from properties.captions import (
+    GeminiCaptionProvider,
+    LocalCaptionProvider,
+    validate_caption,
+    validate_generated_caption,
+)
 from properties.posters import TEMPLATES, render_poster
 from properties.serializers import serialize_public_details
 from properties.tests.test_serialization import make_public_plot
@@ -68,3 +73,14 @@ def test_caption_validation_accepts_hindi_hashtags_with_vowel_marks():
     for bad_tag in ("#", "#_भूमि", "#भूमि बिक्री", "#भूमि!"):
         with pytest.raises(ValueError):
             validate_caption({**value, "hashtags": [bad_tag]})
+
+
+def test_generated_caption_keeps_valid_tags_when_model_returns_a_tag_with_spaces():
+    value = {
+        "headline": "भूमि बिक्री हेतु",
+        "caption": "विवरण के लिए संपर्क करें।",
+        "hashtags": ["#भूमि", "#Sample 1", "#LandForSale"],
+    }
+    assert validate_generated_caption(value).hashtags == ("#भूमि", "#LandForSale")
+    with pytest.raises(ValueError):
+        validate_caption(value)
