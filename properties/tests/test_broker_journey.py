@@ -94,7 +94,7 @@ def test_local_journey(client, django_user_model, settings, tmp_path):
     preview = client.get(reverse("advert-preview", args=[plot.public_id]))
     assert OpenPlotListing.objects.get(pk=plot.pk).status == OpenPlotListing.Status.APPROVED
     assert preview.status_code == 200
-    assert b"Facebook posting is being set up" in preview.content
+    assert b"Posting options are being set up" in preview.content
     assert b"Publish to Facebook" not in preview.content
     assert b"Owner Alice" not in preview.content
     assert b"Do not share" not in preview.content
@@ -204,7 +204,7 @@ def test_create_posting_sends_make_event_once_and_marks_generation_pending(
             reverse("generate-advert", args=[plot.public_id]), {"template": "classic"}
         )
         assert response.status_code == 202
-        assert b"Your request was sent to Make.com" in response.content
+        assert b"Make.com is creating your advert" in response.content
         assert b"Confidential broker notes" not in response.content
         repeated = client.post(
             reverse("generate-advert", args=[plot.public_id]), {"template": "classic"}
