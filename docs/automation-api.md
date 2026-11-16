@@ -3,7 +3,9 @@
 The broker's **Create posting** button sends a small generation event to the configured
 Make.com webhook. It contains the listing UUID, a request UUID, selected template, and
 PropertyPost API URLs, but no property fields, photos, or private details. Make fetches the
-listing separately from the signed automation-input endpoint.
+listing separately from the signed automation-input endpoint, asks the configured text provider for advert text,
+and returns that text to PropertyPost. PropertyPost crops the main photograph with Pillow
+and stores the poster in private object storage.
 
 Set `MAKE_WEBHOOK_URL` from Secret Manager secret `propertypost-make-webhook-url`. Set
 `AUTOMATION_HMAC_SECRET` to the same independent secret in PropertyPost and Make's secure
@@ -90,13 +92,25 @@ editing and approval.
   "headline": "A plot near ORR",
   "caption": "267 square yards in Shamshabad. Call for details.",
   "hashtags": ["#OpenPlot", "#LandForSale"],
-  "poster_path": "posters/1/2ed678c5-8b94-41d3-a803-2ffddb0cb485/poster.png"
+  "template": "classic"
 }
 ```
 
-Response: `{"request_id":"ac1736c9-4d43-479a-b9bb-fbb7bf5595a1","status":"review"}`.
-The poster path must belong to the same broker and listing. Media bytes are never sent
-in a callback.
+PropertyPost accepts only `classic`, `minimal`, or `bold`, creates the poster from the
+listing's main photograph, and stores the PNG privately. Make never uploads or chooses an
+object path. Response: `{"request_id":"ac1736c9-4d43-479a-b9bb-fbb7bf5595a1","status":"review"}`.
+The callback's request UUID must match the currently pending generation. The broker edits
+and approves the returned headline, caption, and hashtags before publication.
+
+## Broker-triggered Facebook publication
+
+After review and approval, the broker clicks **Publish to Facebook**. The website sends
+Make `propertypost.publication.requested` with the approved headline, caption, hashtags,
+listing UUID, callback URL, and a five-minute signed poster URL. It contains no private
+owner information. Make publishes the photo and caption to the selected Facebook Page and
+posts a signed callback to the publication-result endpoint. The website shows **published**
+only after that callback succeeds. Make must use the same HMAC rules for callback signing.
+The request UUID must match the pending publication so retries cannot create another post.
 
 ## POST `/api/v1/listings/{id}/publication-result/`
 
@@ -111,7 +125,7 @@ The listing must be `publishing`. A successful callback marks it `published`.
 ```
 
 Response: `{"request_id":"90327731-cb39-4468-a926-5a7c431ac504","status":"published","external_post_id":"remote-post-42"}`.
-No external publisher is called by this API.
+The broker's approval is the only action that starts this external post.
 
 For either callback, a failed result uses `{"request_id":"...","status":"failed",
 "error":"Short reason"}` while the listing is awaiting that result. It moves the

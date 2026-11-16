@@ -43,3 +43,43 @@ def trigger_generation(
                 raise MakeWebhookError("Make.com did not accept the request.")
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
         raise MakeWebhookError("Make.com could not be reached.") from exc
+
+
+def trigger_publication(
+    webhook_url: str,
+    *,
+    listing_id: str,
+    request_id: str,
+    headline: str,
+    caption: str,
+    hashtags: list[str],
+    poster_url: str,
+    publication_result_url: str,
+) -> None:
+    """Ask Make to publish an already approved public advert and report its result."""
+    parsed_url = urlsplit(webhook_url)
+    if parsed_url.scheme != "https" or not parsed_url.netloc:
+        raise MakeWebhookError("Make.com webhook must use HTTPS.")
+    event = {
+        "event": "propertypost.publication.requested",
+        "request_id": request_id,
+        "listing_id": listing_id,
+        "headline": headline,
+        "caption": caption,
+        "hashtags": hashtags,
+        "message": f"{headline}\n\n{caption}\n\n{' '.join(hashtags)}",
+        "poster_url": poster_url,
+        "publication_result_url": publication_result_url,
+    }
+    request = Request(
+        webhook_url,
+        data=json.dumps(event, separators=(",", ":")).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=10) as response:
+            if not 200 <= response.status < 300:
+                raise MakeWebhookError("Make.com did not accept the publication request.")
+    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        raise MakeWebhookError("Make.com could not be reached.") from exc

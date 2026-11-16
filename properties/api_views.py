@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import json
+import logging
 import time
 from uuid import UUID
 
@@ -15,9 +16,12 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .captions import validate_caption
 from .models import AdvertDraft, AutomationReceipt, OpenPlotListing, PlotPhoto
+from .posters import render_poster
 from .repositories.django import _to_public_domain
 from .serializers import serialize_public_details
 from .services import object_store
+
+logger = logging.getLogger(__name__)
 
 
 def _error(message, status):
@@ -47,6 +51,10 @@ def _authenticated(request) -> bool:
 
 def _image_signature(public_id, photo_id, expires):
     return _mac(f"image\n{public_id}\n{photo_id}\n{expires}".encode())
+
+
+def _poster_signature(public_id, expires):
+    return _mac(f"poster\n{public_id}\n{expires}".encode())
 
 
 @csrf_exempt
@@ -107,6 +115,29 @@ def signed_image(request, public_id, photo_id):
     return response
 
 
+def signed_poster(request, public_id):
+    if request.method != "GET" or not settings.AUTOMATION_HMAC_SECRET:
+        return _error("Unavailable", 403)
+    try:
+        expires = int(request.GET.get("expires", ""))
+    except ValueError:
+        return _error("Invalid poster link", 403)
+    if expires < int(time.time()) or expires > int(time.time()) + 3600:
+        return _error("Expired poster link", 403)
+    if not hmac.compare_digest(
+        request.GET.get("signature", ""), _poster_signature(public_id, expires)
+    ):
+        return _error("Invalid poster link", 403)
+    listing = get_object_or_404(OpenPlotListing, public_id=public_id)
+    if listing.status != OpenPlotListing.Status.PUBLISHING:
+        return _error("Listing is not awaiting publication", 409)
+    advert = get_object_or_404(AdvertDraft, listing=listing)
+    response = HttpResponse(object_store().download(advert.poster_path), content_type="image/png")
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 def _payload(request):
     try:
         data = json.loads(request.body)
@@ -115,6 +146,7 @@ def _payload(request):
         request_id = UUID(data["request_id"])
     except (ValueError, KeyError, TypeError, UnicodeDecodeError):
         return None, None
+    data["request_id"] = str(request_id)
     return data, request_id
 
 
@@ -151,33 +183,54 @@ def _callback(request, public_id, kind):
 
 def _generation(listing, data):
     if set(data) == {"request_id", "status", "error"} and data["status"] == "failed":
-        if listing.status != OpenPlotListing.Status.GENERATING:
+        if (
+            listing.status != OpenPlotListing.Status.GENERATING
+            or str(listing.generation_request_id) != data["request_id"]
+        ):
             return _error("Listing is not awaiting a generation result", 409)
         if not isinstance(data["error"], str) or len(data["error"]) > 300:
             return _error("Invalid error message", 400)
         listing.status = OpenPlotListing.Status.FAILED
         listing.save(update_fields=["status", "updated_at"])
         return {"request_id": data["request_id"], "status": "failed"}
-    if set(data) != {"request_id", "status", "headline", "caption", "hashtags", "poster_path"}:
+    if set(data) != {"request_id", "status", "headline", "caption", "hashtags", "template"}:
         return _error("Invalid generation result fields", 400)
-    if listing.status != OpenPlotListing.Status.GENERATING or data["status"] != "succeeded":
+    if (
+        listing.status != OpenPlotListing.Status.GENERATING
+        or data["status"] != "succeeded"
+        or str(listing.generation_request_id) != data["request_id"]
+    ):
         return _error("Listing is not awaiting a generation result", 409)
     try:
         caption = validate_caption({key: data[key] for key in ("headline", "caption", "hashtags")})
     except ValueError:
         return _error("Invalid caption", 400)
-    path = data["poster_path"]
-    if (
-        not isinstance(path, str)
-        or not path.startswith(f"posters/{listing.broker_id}/{listing.public_id}/")
-        or not path.endswith(".png")
-        or ".." in path
-    ):
-        return _error("Invalid poster path", 400)
+    template = data["template"]
+    if not isinstance(template, str) or template not in {"classic", "minimal", "bold"}:
+        return _error("Invalid poster template", 400)
+    photo = listing.photos.filter(is_main=True).first()
+    if photo is None:
+        return _error("Listing has no main photo", 409)
+    path = f"posters/{listing.broker_id}/{listing.public_id}/{data['request_id']}.png"
+    try:
+        details = serialize_public_details(_to_public_domain(listing))
+        poster = render_poster(object_store().download(photo.object_path), details, template)
+        object_store().upload(path, poster, "image/png")
+    except Exception as exc:
+        logger.error(
+            "Advert poster generation failed",
+            extra={
+                "event": "advert_poster_generation_failed",
+                "exception_type": type(exc).__name__,
+            },
+        )
+        listing.status = OpenPlotListing.Status.FAILED
+        listing.save(update_fields=["status", "updated_at"])
+        return {"request_id": data["request_id"], "status": "failed"}
     AdvertDraft.objects.update_or_create(
         listing=listing,
         defaults={
-            "template": "external",
+            "template": template,
             "poster_path": path,
             "headline": caption.headline,
             "caption": caption.caption,
@@ -191,7 +244,10 @@ def _generation(listing, data):
 
 def _publication(listing, data):
     if set(data) == {"request_id", "status", "error"} and data["status"] == "failed":
-        if listing.status != OpenPlotListing.Status.PUBLISHING:
+        if (
+            listing.status != OpenPlotListing.Status.PUBLISHING
+            or str(listing.publication_request_id) != data["request_id"]
+        ):
             return _error("Listing is not awaiting a publication result", 409)
         if not isinstance(data["error"], str) or len(data["error"]) > 300:
             return _error("Invalid error message", 400)
@@ -200,7 +256,11 @@ def _publication(listing, data):
         return {"request_id": data["request_id"], "status": "failed"}
     if set(data) != {"request_id", "status", "external_post_id"}:
         return _error("Invalid publication result fields", 400)
-    if listing.status != OpenPlotListing.Status.PUBLISHING or data["status"] != "succeeded":
+    if (
+        listing.status != OpenPlotListing.Status.PUBLISHING
+        or data["status"] != "succeeded"
+        or str(listing.publication_request_id) != data["request_id"]
+    ):
         return _error("Listing is not awaiting a publication result", 409)
     post_id = data["external_post_id"]
     if not isinstance(post_id, str) or not post_id.strip() or len(post_id) > 200:

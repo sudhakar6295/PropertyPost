@@ -1,6 +1,7 @@
 """Authenticated, ownership scoped broker journey."""
 
 import logging
+import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,9 +14,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from .api_views import _poster_signature
 from .captions import GeminiCaptionProvider, LocalCaptionProvider
 from .forms import AdvertEditForm, GenerateForm, PhotoForm, PlotForm, PrivateDetailsForm
-from .make_webhook import MakeWebhookError, trigger_generation
+from .make_webhook import MakeWebhookError, trigger_generation, trigger_publication
 from .models import AdvertDraft, OpenPlotListing, OpenPlotPrivateDetails, PlotPhoto
 from .posters import render_poster
 from .repositories.django import _to_public_domain
@@ -246,8 +248,41 @@ def generate_advert(request, public_id):
             )
         elif make_enabled:
             request_id = uuid4()
-            plot.status = OpenPlotListing.Status.GENERATING
-            plot.save(update_fields=["status", "updated_at"])
+            with transaction.atomic():
+                plot = OpenPlotListing.objects.select_for_update().get(
+                    pk=plot.pk, broker=request.user
+                )
+                if plot.status == OpenPlotListing.Status.GENERATING:
+                    form.add_error(None, "This advert is already being created. Please wait.")
+                    return render(
+                        request,
+                        "properties/generate.html",
+                        {
+                            "plot": plot,
+                            "form": form,
+                            "has_main_photo": has_main_photo,
+                            "make_enabled": make_enabled,
+                            "request_pending": True,
+                        },
+                    )
+                if plot.status in {
+                    OpenPlotListing.Status.PUBLISHING,
+                    OpenPlotListing.Status.PUBLISHED,
+                }:
+                    return HttpResponseBadRequest(
+                        "Publishing or published adverts cannot be regenerated."
+                    )
+                plot.status = OpenPlotListing.Status.GENERATING
+                plot.generation_request_id = request_id
+                plot.publication_request_id = None
+                plot.save(
+                    update_fields=[
+                        "status",
+                        "generation_request_id",
+                        "publication_request_id",
+                        "updated_at",
+                    ]
+                )
             try:
                 trigger_generation(
                     settings.MAKE_WEBHOOK_URL,
@@ -289,8 +324,41 @@ def generate_advert(request, public_id):
                     status=202,
                 )
         else:
-            plot.status = OpenPlotListing.Status.GENERATING
-            plot.save(update_fields=["status", "updated_at"])
+            with transaction.atomic():
+                plot = OpenPlotListing.objects.select_for_update().get(
+                    pk=plot.pk, broker=request.user
+                )
+                if plot.status == OpenPlotListing.Status.GENERATING:
+                    form.add_error(None, "This advert is already being created. Please wait.")
+                    return render(
+                        request,
+                        "properties/generate.html",
+                        {
+                            "plot": plot,
+                            "form": form,
+                            "has_main_photo": has_main_photo,
+                            "make_enabled": make_enabled,
+                            "request_pending": True,
+                        },
+                    )
+                if plot.status in {
+                    OpenPlotListing.Status.PUBLISHING,
+                    OpenPlotListing.Status.PUBLISHED,
+                }:
+                    return HttpResponseBadRequest(
+                        "Publishing or published adverts cannot be regenerated."
+                    )
+                plot.status = OpenPlotListing.Status.GENERATING
+                plot.generation_request_id = uuid4()
+                plot.publication_request_id = None
+                plot.save(
+                    update_fields=[
+                        "status",
+                        "generation_request_id",
+                        "publication_request_id",
+                        "updated_at",
+                    ]
+                )
             try:
                 details = serialize_public_details(_to_public_domain(plot))
                 logo = form.cleaned_data["logo"]
@@ -356,12 +424,14 @@ def advert_preview(request, public_id):
         OpenPlotListing.Status.APPROVED,
         OpenPlotListing.Status.PUBLISHING,
         OpenPlotListing.Status.PUBLISHED,
-    }:
+    } and not (
+        plot.status == OpenPlotListing.Status.FAILED and plot.publication_request_id is not None
+    ):
         return redirect("review-details", public_id=public_id)
     return render(
         request,
         "properties/advert_preview.html" if hasattr(plot, "advert") else "properties/preview.html",
-        {"plot": plot},
+        {"plot": plot, "publication_enabled": settings.MAKE_PUBLICATION_ENABLED},
     )
 
 
@@ -369,19 +439,63 @@ def advert_preview(request, public_id):
 @require_POST
 def publish_plot(request, public_id):
     plot = owned_plot(request, public_id)
-    if not hasattr(plot, "advert") or plot.status not in {
-        OpenPlotListing.Status.APPROVED,
-        OpenPlotListing.Status.PUBLISHED,
-    }:
-        return HttpResponseBadRequest("Review and approve the details before publishing.")
-    plot.status = OpenPlotListing.Status.PUBLISHED
-    plot.save(update_fields=["status", "updated_at"])
+    if not settings.MAKE_PUBLICATION_ENABLED:
+        return HttpResponseBadRequest("Facebook posting is not ready yet.")
+    if not settings.MAKE_WEBHOOK_URL:
+        return HttpResponseBadRequest("Facebook posting automation is not configured yet.")
+    request_id = uuid4()
+    with transaction.atomic():
+        plot = OpenPlotListing.objects.select_for_update().get(pk=plot.pk, broker=request.user)
+        approved_for_retry = (
+            plot.status == OpenPlotListing.Status.FAILED and plot.publication_request_id is not None
+        )
+        if not hasattr(plot, "advert") or (
+            plot.status != OpenPlotListing.Status.APPROVED and not approved_for_retry
+        ):
+            return HttpResponseBadRequest("Review and approve the details before publishing.")
+        plot.status = OpenPlotListing.Status.PUBLISHING
+        plot.publication_request_id = request_id
+        plot.save(update_fields=["status", "publication_request_id", "updated_at"])
+    expires = int(time.time()) + settings.AUTOMATION_IMAGE_TTL_SECONDS
+    poster_path = reverse("automation-poster", args=[plot.public_id])
+    poster_signature = _poster_signature(plot.public_id, expires)
+    poster_url = request.build_absolute_uri(
+        f"{poster_path}?expires={expires}&signature={poster_signature}"
+    )
+    callback_url = request.build_absolute_uri(reverse("publication-result", args=[plot.public_id]))
+    try:
+        trigger_publication(
+            settings.MAKE_WEBHOOK_URL,
+            listing_id=str(plot.public_id),
+            request_id=str(request_id),
+            headline=plot.advert.headline,
+            caption=plot.advert.caption,
+            hashtags=list(plot.advert.hashtags),
+            poster_url=poster_url,
+            publication_result_url=callback_url,
+        )
+    except MakeWebhookError as exc:
+        logger.error(
+            "Make publication trigger failed",
+            extra={
+                "event": "make_publication_trigger_failed",
+                "exception_type": type(exc).__name__,
+            },
+        )
+        plot.refresh_from_db(fields=["status"])
+        if plot.status == OpenPlotListing.Status.PUBLISHING:
+            plot.status = OpenPlotListing.Status.FAILED
+            plot.save(update_fields=["status", "updated_at"])
+        return HttpResponse("Could not send the publication request. Please try again.", status=503)
     return redirect("published-result", public_id=public_id)
 
 
 @login_required
 def published_result(request, public_id):
     plot = owned_plot(request, public_id)
-    if plot.status != OpenPlotListing.Status.PUBLISHED:
+    if plot.status not in {
+        OpenPlotListing.Status.PUBLISHED,
+        OpenPlotListing.Status.PUBLISHING,
+    }:
         return redirect("advert-preview", public_id=public_id)
     return render(request, "properties/published.html", {"plot": plot})

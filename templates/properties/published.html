@@ -1,3 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Advert published | PropertyPost{% endblock %}
-{% block content %}<div class="container py-5"><div class="row justify-content-center"><div class="col-12 col-md-8 text-center"><div class="card border-0 shadow-sm"><div class="card-body p-5"><div class="display-4 text-success mb-3">✓</div><h1 class="h2">Your advert is published</h1><p class="text-secondary">{{ plot.title }} is now visible to buyers on PropertyPost.</p><div class="d-flex flex-wrap justify-content-center gap-2"><a class="btn btn-primary" href="{% url 'properties:list' %}">View public adverts</a><a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">Back to my plots</a></div></div></div></div></div></div>{% endblock %}
+{% block title %}Advert publishing | PropertyPost{% endblock %}
+{% block content %}
+<div class="container py-5"><div class="row justify-content-center"><div class="col-12 col-md-8 text-center"><div class="card border-0 shadow-sm"><div class="card-body p-5">
+{% if plot.status == 'publishing' %}
+<div class="display-4 text-primary mb-3">…</div><h1 class="h2">Your advert is being posted</h1><p class="text-secondary">{{ plot.title }} was sent to Facebook. Refresh this page after Make.com confirms the result.</p><a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">Back to my plots</a>
+{% else %}
+<div class="display-4 text-success mb-3">✓</div><h1 class="h2">Your advert is published</h1><p class="text-secondary">{{ plot.title }} is now visible to buyers on Facebook.</p><div class="d-flex flex-wrap justify-content-center gap-2"><a class="btn btn-primary" href="{% url 'properties:list' %}">View public adverts</a><a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">Back to my plots</a></div>
+{% endif %}
+</div></div></div></div></div>
+{% endblock %}

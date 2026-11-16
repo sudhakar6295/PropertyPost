@@ -2,10 +2,13 @@ import hashlib
 import hmac
 import json
 import time
+from io import BytesIO
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 from django.urls import reverse
+from PIL import Image
 
 from properties.api_views import _image_signature
 from properties.models import AutomationReceipt, OpenPlotListing, OpenPlotPrivateDetails, PlotPhoto
@@ -35,6 +38,8 @@ def listing(django_user_model, settings):
     settings.AUTOMATION_HMAC_SECRET = SECRET
     broker = django_user_model.objects.create_user(username="api-broker")
     plot = create_listing("Public plot", OpenPlotListing.Status.GENERATING, broker)
+    plot.generation_request_id = uuid4()
+    plot.save(update_fields=["generation_request_id"])
     OpenPlotPrivateDetails.objects.create(
         listing=plot,
         owner_name="Secret owner",
@@ -46,10 +51,12 @@ def listing(django_user_model, settings):
         listing=plot,
         object_path="originals/test/photo.png",
         content_type="image/png",
-        size_bytes=5,
+        size_bytes=100,
         is_main=True,
     )
-    object_store().upload(photo.object_path, b"photo", "image/png")
+    image = BytesIO()
+    Image.new("RGB", (24, 24), "green").save(image, "PNG")
+    object_store().upload(photo.object_path, image.getvalue(), "image/png")
     return plot
 
 
@@ -69,7 +76,7 @@ def test_input_is_signed_public_only_and_images_expire(client, listing):
     from urllib.parse import urlsplit
 
     parsed = urlsplit(image_url)
-    assert client.get(parsed.path + "?" + parsed.query).content == b"photo"
+    assert client.get(parsed.path + "?" + parsed.query).status_code == 200
     assert client.get(parsed.path).status_code == 403
     expired_at = int(time.time()) - 1
     expired_image = (
@@ -98,12 +105,12 @@ def test_automation_input_only_serves_a_pending_generation(client, listing):
 def test_generation_callback_is_validated_and_idempotent(client, listing):
     path = reverse("generation-result", args=[listing.public_id])
     payload = {
-        "request_id": str(uuid4()),
+        "request_id": str(listing.generation_request_id),
         "status": "succeeded",
         "headline": "A plot",
         "caption": "Good location",
         "hashtags": ["#Land"],
-        "poster_path": f"posters/{listing.broker_id}/{listing.public_id}/poster.png",
+        "template": "minimal",
     }
     unsigned = client.post(path, data=json.dumps(payload), content_type="application/json")
     assert unsigned.status_code == 401
@@ -114,6 +121,10 @@ def test_generation_callback_is_validated_and_idempotent(client, listing):
     assert signed_request(client, "POST", path, payload).json() == first.json()
     assert AutomationReceipt.objects.filter(listing=listing).count() == 1
     assert OpenPlotListing.objects.get(pk=listing.pk).status == OpenPlotListing.Status.REVIEW
+    advert = listing.advert
+    assert advert.template == "minimal"
+    assert advert.poster_path.startswith(f"posters/{listing.broker_id}/{listing.public_id}/")
+    assert advert.poster_path.endswith(f"{payload['request_id']}.png")
     changed = signed_request(client, "POST", path, {**payload, "headline": "Changed"})
     assert changed.status_code == 409
 
@@ -121,9 +132,11 @@ def test_generation_callback_is_validated_and_idempotent(client, listing):
 @pytest.mark.django_db
 def test_publication_retry_does_not_create_second_post(client, listing):
     listing.status = OpenPlotListing.Status.PUBLISHING
-    listing.save(update_fields=["status"])
+    request_id = uuid4()
+    listing.publication_request_id = request_id
+    listing.save(update_fields=["status", "publication_request_id"])
     path = reverse("publication-result", args=[listing.public_id])
-    payload = {"request_id": str(uuid4()), "status": "succeeded", "external_post_id": "post-42"}
+    payload = {"request_id": str(request_id), "status": "succeeded", "external_post_id": "post-42"}
     first = signed_request(client, "POST", path, payload)
     assert first.status_code == 200
     assert signed_request(client, "POST", path, payload).json() == first.json()
@@ -136,8 +149,83 @@ def test_publication_retry_does_not_create_second_post(client, listing):
 @pytest.mark.django_db
 def test_failed_callback_changes_status_once(client, listing):
     path = reverse("generation-result", args=[listing.public_id])
-    payload = {"request_id": str(uuid4()), "status": "failed", "error": "Provider unavailable"}
+    payload = {
+        "request_id": str(listing.generation_request_id),
+        "status": "failed",
+        "error": "Provider unavailable",
+    }
     assert signed_request(client, "POST", path, payload).json()["status"] == "failed"
     assert signed_request(client, "POST", path, payload).json()["status"] == "failed"
     assert OpenPlotListing.objects.get(pk=listing.pk).status == OpenPlotListing.Status.FAILED
     assert AutomationReceipt.objects.filter(listing=listing).count() == 1
+
+
+@pytest.mark.django_db
+def test_signed_poster_only_works_for_pending_publication(client, listing):
+    from properties.api_views import _poster_signature
+    from properties.models import AdvertDraft
+
+    listing.status = OpenPlotListing.Status.PUBLISHING
+    listing.publication_request_id = uuid4()
+    listing.save(update_fields=["status", "publication_request_id"])
+    poster_path = f"posters/{listing.broker_id}/{listing.public_id}/poster.png"
+    AdvertDraft.objects.create(
+        listing=listing,
+        template="minimal",
+        poster_path=poster_path,
+        headline="A plot",
+        caption="Good location",
+        hashtags=["#Land"],
+    )
+    object_store().upload(poster_path, b"poster-bytes", "image/png")
+    expires = int(time.time()) + 60
+    path = reverse("automation-poster", args=[listing.public_id])
+    query = f"?expires={expires}&signature={_poster_signature(listing.public_id, expires)}"
+
+    response = client.get(path + query)
+
+    assert response.status_code == 200
+    assert response.content == b"poster-bytes"
+    assert response["Cache-Control"] == "private, no-store"
+    assert client.get(path).status_code == 403
+    listing.status = OpenPlotListing.Status.APPROVED
+    listing.save(update_fields=["status"])
+    assert client.get(path + query).status_code == 409
+
+
+@pytest.mark.django_db
+def test_callback_must_match_pending_generation_request(client, listing):
+    path = reverse("generation-result", args=[listing.public_id])
+    payload = {
+        "request_id": str(uuid4()),
+        "status": "succeeded",
+        "headline": "A plot",
+        "caption": "Good location",
+        "hashtags": ["#Land"],
+        "template": "minimal",
+    }
+
+    response = signed_request(client, "POST", path, payload)
+
+    assert response.status_code == 409
+    assert OpenPlotListing.objects.get(pk=listing.pk).status == OpenPlotListing.Status.GENERATING
+
+
+@pytest.mark.django_db
+def test_poster_error_marks_generation_failed_without_exposing_exception(client, listing, caplog):
+    path = reverse("generation-result", args=[listing.public_id])
+    payload = {
+        "request_id": str(listing.generation_request_id),
+        "status": "succeeded",
+        "headline": "A plot",
+        "caption": "Good location",
+        "hashtags": ["#Land"],
+        "template": "minimal",
+    }
+    with patch("properties.api_views.render_poster", side_effect=OSError("private storage path")):
+        response = signed_request(client, "POST", path, payload)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    assert OpenPlotListing.objects.get(pk=listing.pk).status == OpenPlotListing.Status.FAILED
+    assert "private storage path" not in caplog.text

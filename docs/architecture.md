@@ -6,7 +6,7 @@ Local development runs MySQL in Docker Compose on an isolated named volume. Prod
 
 Django username/password authentication and Django sessions are used in local and production environments, with user accounts stored in the configured MySQL database. Photos and generated posters are private: local development uses files under ignored `media/`, while production uses private Google Cloud Storage through Application Default Credentials or the Cloud Run service account.
 
-Pillow creates posters in three templates. Caption generation uses the deterministic local provider or Gemini, which receives only approved public fields. Brokers can edit the result before approval. Versioned automation callbacks use timestamped HMAC signatures and idempotency receipts; Make.com and Facebook are not connected.
+Pillow creates posters in three templates and keeps the generated PNG in private object storage. Gemini receives only allow-listed public listing fields and returns validated JSON. Brokers can edit the result before approval. Versioned Make callbacks use timestamped HMAC signatures, request correlation, and idempotency receipts. Facebook posting begins only after the broker approves and clicks Publish; Make reports the external post result before the UI marks it published.
 
 Gunicorn serves Django behind HTTPS. WhiteNoise serves hashed static assets. `/health/` reports process liveness; `/ready/` checks database connectivity. JSON logs omit request bodies, private listing values and tokens. Cloud Run uses minimum instances zero and conservative resource limits; production deployment holds candidate revisions at zero traffic until health/readiness checks pass.
 

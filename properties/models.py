@@ -87,6 +87,8 @@ class OpenPlotListing(models.Model):
     contact_number = models.CharField(max_length=16, validators=[phone_number_validator])
     language = models.CharField(max_length=2, choices=Language.choices)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
+    generation_request_id = models.UUIDField(null=True, blank=True)
+    publication_request_id = models.UUIDField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

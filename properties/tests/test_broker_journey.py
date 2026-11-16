@@ -17,6 +17,7 @@ from propertypost.logging import SafeJsonFormatter
 def test_local_journey(client, django_user_model, settings, tmp_path):
     settings.DEBUG = True
     settings.MAKE_WEBHOOK_URL = ""
+    settings.MAKE_PUBLICATION_ENABLED = False
     settings.MEDIA_ROOT = tmp_path
     broker = django_user_model.objects.create_user(username="alice", password="StrongPass123!")
     assert client.get(reverse("dashboard")).status_code == 302
@@ -93,9 +94,38 @@ def test_local_journey(client, django_user_model, settings, tmp_path):
     preview = client.get(reverse("advert-preview", args=[plot.public_id]))
     assert OpenPlotListing.objects.get(pk=plot.pk).status == OpenPlotListing.Status.APPROVED
     assert preview.status_code == 200
+    assert b"Facebook posting is being set up" in preview.content
+    assert b"Publish to Facebook" not in preview.content
     assert b"Owner Alice" not in preview.content
     assert b"Do not share" not in preview.content
-    assert client.post(reverse("publish-plot", args=[plot.public_id])).status_code == 302
+    settings.MAKE_WEBHOOK_URL = "https://hook.example.invalid/secret-token"
+    settings.AUTOMATION_HMAC_SECRET = "test-only-automation-secret"
+    settings.MAKE_PUBLICATION_ENABLED = True
+    with patch("properties.broker_views.trigger_publication") as publication:
+        publish_response = client.post(reverse("publish-plot", args=[plot.public_id]))
+    assert publish_response.status_code == 302
+    plot.refresh_from_db()
+    assert plot.status == OpenPlotListing.Status.PUBLISHING
+    event = publication.call_args.kwargs
+    assert event["listing_id"] == str(plot.public_id)
+    assert "Private owner" not in str(event)
+    assert "Confidential broker notes" not in str(event)
+    assert "/api/v1/listings/" in event["poster_url"]
+    from properties.tests.test_automation_api import signed_request
+
+    callback_path = reverse("publication-result", args=[plot.public_id])
+    callback = signed_request(
+        client,
+        "POST",
+        callback_path,
+        {
+            "request_id": event["request_id"],
+            "status": "succeeded",
+            "external_post_id": "mock-facebook-post",
+        },
+        secret=settings.AUTOMATION_HMAC_SECRET,
+    )
+    assert callback.status_code == 200
     assert client.get(reverse("published-result", args=[plot.public_id])).status_code == 200
     assert b"East-facing plot" in client.get(reverse("properties:list")).content
 

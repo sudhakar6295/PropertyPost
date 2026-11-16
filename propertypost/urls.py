@@ -32,6 +32,11 @@ urlpatterns = [
         api_views.signed_image,
         name="automation-image",
     ),
+    path(
+        "api/v1/listings/<uuid:public_id>/poster/",
+        api_views.signed_poster,
+        name="automation-poster",
+    ),
     path("admin/", admin.site.urls),
     path("login/", broker_views.broker_login, name="broker-login"),
     path("logout/", broker_views.broker_logout, name="broker-logout"),

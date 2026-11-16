@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from properties.make_webhook import MakeWebhookError, trigger_generation
+from properties.make_webhook import MakeWebhookError, trigger_generation, trigger_publication
 
 
 def test_generation_event_sends_listing_reference_without_property_details():
@@ -48,3 +48,34 @@ def test_webhook_rejects_non_https_url():
             automation_input_url="https://propertypost.example.invalid/api/v1/input/",
             generation_result_url="https://propertypost.example.invalid/api/v1/result/",
         )
+
+
+def test_publication_event_contains_approved_content_and_signed_urls_only():
+    response = Mock(status=200)
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=False)
+
+    with patch("properties.make_webhook.urlopen", return_value=response) as send:
+        trigger_publication(
+            "https://hook.example.invalid/token",
+            listing_id="b9f79a82-9653-4520-a48b-ec7d2779cd25",
+            request_id="60c926ed-4bd8-40a8-bafb-4ac7ed96c769",
+            headline="Open plot near ORR",
+            caption="Ready to build. Call today.",
+            hashtags=["#OpenPlot"],
+            poster_url="https://propertypost.example.invalid/api/v1/poster/?expires=123&signature=abc",
+            publication_result_url="https://propertypost.example.invalid/api/v1/result/",
+        )
+
+    request = send.call_args.args[0]
+    payload = json.loads(request.data)
+    assert payload["event"] == "propertypost.publication.requested"
+    assert payload["headline"] == "Open plot near ORR"
+    assert payload["caption"] == "Ready to build. Call today."
+    assert payload["hashtags"] == ["#OpenPlot"]
+    assert payload["message"] == "Open plot near ORR\n\nReady to build. Call today.\n\n#OpenPlot"
+    assert payload["poster_url"].startswith("https://")
+    assert "private_details" not in payload
+    assert "owner_name" not in payload
+    assert "internal_notes" not in payload
+    assert request.get_method() == "POST"

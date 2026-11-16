@@ -1,3 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Advert preview | PropertyPost{% endblock %}
-{% block content %}<div class="container py-5"><div class="row justify-content-center"><div class="col-12 col-lg-9"><h1 class="h2">Advert preview</h1><p class="text-secondary">This is the poster and text you approved.</p><div class="row g-4"><div class="col-md-6"><img class="img-fluid rounded shadow-sm" src="{% url 'private-poster' plot.public_id %}" alt="Poster for {{ plot.title }}"></div><div class="col-md-6"><h2 class="h3">{{ plot.advert.headline }}</h2><p>{{ plot.advert.caption }}</p><p class="text-primary">{% for tag in plot.advert.hashtags %}{{ tag }} {% endfor %}</p>{% if plot.status == 'approved' %}<form method="post" action="{% url 'publish-plot' plot.public_id %}">{% csrf_token %}<button class="btn btn-primary" type="submit">Publish advert</button></form>{% endif %}</div></div></div></div></div>{% endblock %}
+{% block content %}
+<div class="container py-5"><div class="row justify-content-center"><div class="col-12 col-lg-9">
+<h1 class="h2">Advert preview</h1><p class="text-secondary">This is the poster and text you approved.</p>
+<div class="row g-4"><div class="col-md-6"><img class="img-fluid rounded shadow-sm" src="{% url 'private-poster' plot.public_id %}" alt="Poster for {{ plot.title }}"></div>
+<div class="col-md-6"><h2 class="h3">{{ plot.advert.headline }}</h2><p>{{ plot.advert.caption }}</p><p class="text-primary">{% for tag in plot.advert.hashtags %}{{ tag }} {% endfor %}</p>
+{% if publication_enabled and plot.status == 'approved' or publication_enabled and plot.status == 'failed' and plot.publication_request_id %}
+<form method="post" action="{% url 'publish-plot' plot.public_id %}">{% csrf_token %}<button class="btn btn-primary" type="submit">{% if plot.status == 'failed' %}Try posting again{% else %}Publish to Facebook{% endif %}</button></form>
+{% elif plot.status == 'publishing' %}<p class="alert alert-info">Your Facebook post is being processed. Refresh this page in a moment.</p>
+{% elif plot.status == 'published' %}<p class="alert alert-success">This advert has been published to Facebook.</p>
+{% elif plot.status == 'approved' %}<p class="alert alert-info">Your advert is saved and approved. Facebook posting is being set up.</p>{% endif %}
+</div></div></div></div></div>
+{% endblock %}
