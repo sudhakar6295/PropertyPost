@@ -184,7 +184,7 @@ def test_publication_callback_requires_every_selected_platform(client, listing):
     assert response.status_code == 400
     listing.refresh_from_db()
     assert listing.status == OpenPlotListing.Status.PUBLISHING
-    assert OpenPlotListing.objects.get(pk=listing.pk).status == OpenPlotListing.Status.PUBLISHED
+    assert OpenPlotListing.objects.get(pk=listing.pk).status == OpenPlotListing.Status.PUBLISHING
     second_post = signed_request(client, "POST", path, {**payload, "request_id": str(uuid4())})
     assert second_post.status_code == 409
 
