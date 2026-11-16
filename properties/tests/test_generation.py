@@ -56,3 +56,15 @@ def test_caption_validation_rejects_bad_structure():
         with pytest.raises(ValueError):
             validate_caption(value)
     assert LocalCaptionProvider().generate(serialize_public_details(make_public_plot())).hashtags
+
+
+def test_caption_validation_accepts_hindi_hashtags_with_vowel_marks():
+    value = {
+        "headline": "भूमि बिक्री हेतु",
+        "caption": "विवरण के लिए संपर्क करें।",
+        "hashtags": ["#भूमि", "#संपत्तिबिक्री"],
+    }
+    assert validate_caption(value).hashtags == ("#भूमि", "#संपत्तिबिक्री")
+    for bad_tag in ("#", "#_भूमि", "#भूमि बिक्री", "#भूमि!"):
+        with pytest.raises(ValueError):
+            validate_caption({**value, "hashtags": [bad_tag]})

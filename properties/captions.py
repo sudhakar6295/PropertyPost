@@ -1,6 +1,7 @@
 """Caption providers receive an allow-listed public document only."""
 
 import json
+import unicodedata
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.request import Request, urlopen
@@ -15,6 +16,15 @@ class Caption:
     hashtags: tuple[str, ...]
 
 
+def _valid_hashtag(tag: object) -> bool:
+    if not isinstance(tag, str) or not tag.startswith("#") or not 2 <= len(tag) <= 40:
+        return False
+    first, rest = tag[1], tag[2:]
+    return unicodedata.category(first)[0] in {"L", "N"} and all(
+        char == "_" or unicodedata.category(char)[0] in {"L", "N", "M"} for char in rest
+    )
+
+
 def validate_caption(value: object) -> Caption:
     if not isinstance(value, dict) or set(value) != {"headline", "caption", "hashtags"}:
         raise ValueError("Caption JSON must contain headline, caption and hashtags only.")
@@ -23,17 +33,7 @@ def validate_caption(value: object) -> Caption:
         raise ValueError("Headline must be 1 to 100 characters.")
     if not isinstance(body, str) or not body.strip() or len(body) > 1000:
         raise ValueError("Caption must be 1 to 1000 characters.")
-    if (
-        not isinstance(tags, list)
-        or len(tags) > 8
-        or any(
-            not isinstance(tag, str)
-            or not tag.startswith("#")
-            or len(tag) > 40
-            or not tag[1:].replace("_", "").isalnum()
-            for tag in tags
-        )
-    ):
+    if not isinstance(tags, list) or len(tags) > 8 or any(not _valid_hashtag(tag) for tag in tags):
         raise ValueError("Use up to eight simple hashtags.")
     return Caption(headline.strip(), body.strip(), tuple(tags))
 
