@@ -98,23 +98,46 @@ editing and approval.
 
 PropertyPost accepts only `classic`, `minimal`, or `bold`, creates the poster from the
 listing's main photograph, and stores the PNG privately. Make never uploads or chooses an
-object path. Response: `{"request_id":"ac1736c9-4d43-479a-b9bb-fbb7bf5595a1","status":"review"}`.
+object path. The headline, caption, hashtags, and poster path are saved in the listing's
+`AdvertDraft` row, and the callback response is saved in `AutomationReceipt`. Refreshing the
+progress page checks the listing status and opens the saved review screen as soon as the
+callback changes it to `review`. Response: `{"request_id":"ac1736c9-4d43-479a-b9bb-fbb7bf5595a1","status":"review"}`.
 The callback's request UUID must match the currently pending generation. The broker edits
 and approves the returned headline, caption, and hashtags before publication.
 
-## Broker-triggered Facebook publication
+## Broker-triggered social publishing
 
-After review and approval, the broker clicks **Publish to Facebook**. The website sends
-Make `propertypost.publication.requested` with the approved headline, caption, hashtags,
-listing UUID, callback URL, and a five-minute signed poster URL. It contains no private
-owner information. Make publishes the photo and caption to the selected Facebook Page and
-posts a signed callback to the publication-result endpoint. The website shows **published**
-only after that callback succeeds. Make must use the same HMAC rules for callback signing.
-The request UUID must match the pending publication so retries cannot create another post.
+After approval, the broker can choose Facebook, Instagram, or both. The publication webhook
+is configured separately from the generation webhook through `MAKE_PUBLICATION_WEBHOOK_URL`.
+Keep it secret-backed in production and leave `MAKE_PUBLICATION_ENABLED=false` until its Make
+scenario and connections are ready. The request includes the selected `platforms`, approved
+text, listing UUID, callback URL, and a five-minute signed poster URL. It contains no private
+owner information. For retries, `already_published` lists channel post IDs already recorded;
+Make should skip those channels and publish only the remaining ones.
+
+After all selected channels succeed, Make signs this callback:
+
+```json
+{
+  "request_id": "90327731-cb39-4468-a926-5a7c431ac504",
+  "status": "succeeded",
+  "external_post_ids": {
+    "facebook": "remote-facebook-post-42",
+    "instagram": "remote-instagram-post-83"
+  }
+}
+```
+
+The app stores the channel post IDs on the listing and in the idempotency receipt. It shows
+`published` only after every selected platform has a saved post ID. If one channel fails,
+Make may return `status: "failed"` and any channel IDs that succeeded in
+`external_post_ids`; a retry receives those IDs in `already_published` and must not duplicate
+those posts. The request UUID must match the pending publication.
 
 ## POST `/api/v1/listings/{id}/publication-result/`
 
-The listing must be `publishing`. A successful callback marks it `published`.
+The listing must be `publishing`. A successful callback must include an ID for every selected
+platform. The legacy single-channel `external_post_id` field is still accepted for Facebook.
 
 ```json
 {
@@ -124,8 +147,8 @@ The listing must be `publishing`. A successful callback marks it `published`.
 }
 ```
 
-Response: `{"request_id":"90327731-cb39-4468-a926-5a7c431ac504","status":"published","external_post_id":"remote-post-42"}`.
-The broker's approval is the only action that starts this external post.
+Response: `{"request_id":"90327731-cb39-4468-a926-5a7c431ac504","status":"published","external_post_ids":{"facebook":"remote-facebook-post-42","instagram":"remote-instagram-post-83"}}`.
+The broker's approval is the only action that starts these external posts.
 
 For either callback, a failed result uses `{"request_id":"...","status":"failed",
 "error":"Short reason"}` while the listing is awaiting that result. It moves the

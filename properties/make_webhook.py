@@ -53,6 +53,8 @@ def trigger_publication(
     headline: str,
     caption: str,
     hashtags: list[str],
+    platforms: list[str],
+    already_published: dict[str, str],
     poster_url: str,
     publication_result_url: str,
 ) -> None:
@@ -60,6 +62,15 @@ def trigger_publication(
     parsed_url = urlsplit(webhook_url)
     if parsed_url.scheme != "https" or not parsed_url.netloc:
         raise MakeWebhookError("Make.com webhook must use HTTPS.")
+    allowed_platforms = {"facebook", "instagram"}
+    if (
+        not platforms
+        or len(set(platforms)) != len(platforms)
+        or not set(platforms) <= allowed_platforms
+    ):
+        raise MakeWebhookError("Choose Facebook, Instagram, or both.")
+    if not set(already_published) <= allowed_platforms:
+        raise MakeWebhookError("Publication state contains an unknown platform.")
     event = {
         "event": "propertypost.publication.requested",
         "request_id": request_id,
@@ -67,6 +78,8 @@ def trigger_publication(
         "headline": headline,
         "caption": caption,
         "hashtags": hashtags,
+        "platforms": platforms,
+        "already_published": already_published,
         "message": f"{headline}\n\n{caption}\n\n{' '.join(hashtags)}",
         "poster_url": poster_url,
         "publication_result_url": publication_result_url,

@@ -99,15 +99,19 @@ def test_local_journey(client, django_user_model, settings, tmp_path):
     assert b"Owner Alice" not in preview.content
     assert b"Do not share" not in preview.content
     settings.MAKE_WEBHOOK_URL = "https://hook.example.invalid/secret-token"
+    settings.MAKE_PUBLICATION_WEBHOOK_URL = "https://hook.example.invalid/publication-token"
     settings.AUTOMATION_HMAC_SECRET = "test-only-automation-secret"
     settings.MAKE_PUBLICATION_ENABLED = True
     with patch("properties.broker_views.trigger_publication") as publication:
-        publish_response = client.post(reverse("publish-plot", args=[plot.public_id]))
+        publish_response = client.post(
+            reverse("publish-plot", args=[plot.public_id]), {"platform": "facebook"}
+        )
     assert publish_response.status_code == 302
     plot.refresh_from_db()
     assert plot.status == OpenPlotListing.Status.PUBLISHING
     event = publication.call_args.kwargs
     assert event["listing_id"] == str(plot.public_id)
+    assert event["platforms"] == ["facebook"]
     assert "Private owner" not in str(event)
     assert "Confidential broker notes" not in str(event)
     assert "/api/v1/listings/" in event["poster_url"]
@@ -215,6 +219,46 @@ def test_create_posting_sends_make_event_once_and_marks_generation_pending(
     assert "generation_result_url" in event
     plot.refresh_from_db()
     assert plot.status == OpenPlotListing.Status.GENERATING
+
+
+@pytest.mark.django_db
+def test_generation_status_returns_saved_review_after_refresh(client, django_user_model):
+    from properties.models import AdvertDraft
+    from properties.tests.test_views import create_listing
+
+    broker = django_user_model.objects.create_user(username="alice", password="StrongPass123!")
+    client.force_login(broker)
+    plot = create_listing("Saved result", OpenPlotListing.Status.REVIEW, broker)
+    AdvertDraft.objects.create(
+        listing=plot,
+        template="minimal",
+        poster_path="posters/1/saved.png",
+        headline="A saved headline",
+        caption="A saved caption",
+        hashtags=["#Land"],
+    )
+
+    response = client.get(reverse("generation-status", args=[plot.public_id]))
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "review",
+        "next_url": reverse("review-details", args=[plot.public_id]),
+    }
+
+
+@pytest.mark.django_db
+def test_generation_status_is_scoped_to_listing_owner(client, django_user_model):
+    from properties.tests.test_views import create_listing
+
+    owner = django_user_model.objects.create_user(username="owner", password="StrongPass123!")
+    other = django_user_model.objects.create_user(username="other", password="StrongPass123!")
+    plot = create_listing("Owner listing", OpenPlotListing.Status.GENERATING, owner)
+    client.force_login(other)
+
+    response = client.get(reverse("generation-status", args=[plot.public_id]))
+
+    assert response.status_code == 404
 
 
 @pytest.mark.django_db

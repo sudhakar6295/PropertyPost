@@ -142,6 +142,48 @@ def test_publication_retry_does_not_create_second_post(client, listing):
     assert first.status_code == 200
     assert signed_request(client, "POST", path, payload).json() == first.json()
     assert AutomationReceipt.objects.filter(listing=listing, kind="publication").count() == 1
+
+
+@pytest.mark.django_db
+def test_publication_callback_persists_facebook_and_instagram_ids(client, listing):
+    listing.status = OpenPlotListing.Status.PUBLISHING
+    listing.publication_request_id = uuid4()
+    listing.publication_platforms = ["facebook", "instagram"]
+    listing.save(update_fields=["status", "publication_request_id", "publication_platforms"])
+    path = reverse("publication-result", args=[listing.public_id])
+    payload = {
+        "request_id": str(listing.publication_request_id),
+        "status": "succeeded",
+        "external_post_ids": {"facebook": "fb-post-1", "instagram": "ig-post-1"},
+    }
+
+    response = signed_request(client, "POST", path, payload)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "published"
+    listing.refresh_from_db()
+    assert listing.publication_results == payload["external_post_ids"]
+    assert listing.status == OpenPlotListing.Status.PUBLISHED
+
+
+@pytest.mark.django_db
+def test_publication_callback_requires_every_selected_platform(client, listing):
+    listing.status = OpenPlotListing.Status.PUBLISHING
+    listing.publication_request_id = uuid4()
+    listing.publication_platforms = ["facebook", "instagram"]
+    listing.save(update_fields=["status", "publication_request_id", "publication_platforms"])
+    path = reverse("publication-result", args=[listing.public_id])
+    payload = {
+        "request_id": str(listing.publication_request_id),
+        "status": "succeeded",
+        "external_post_ids": {"facebook": "fb-post-1"},
+    }
+
+    response = signed_request(client, "POST", path, payload)
+
+    assert response.status_code == 400
+    listing.refresh_from_db()
+    assert listing.status == OpenPlotListing.Status.PUBLISHING
     assert OpenPlotListing.objects.get(pk=listing.pk).status == OpenPlotListing.Status.PUBLISHED
     second_post = signed_request(client, "POST", path, {**payload, "request_id": str(uuid4())})
     assert second_post.status_code == 409

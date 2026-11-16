@@ -9,14 +9,21 @@ from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.db import DatabaseError, transaction
-from django.http import HttpResponse, HttpResponseBadRequest
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from .api_views import _poster_signature
 from .captions import GeminiCaptionProvider, LocalCaptionProvider
-from .forms import AdvertEditForm, GenerateForm, PhotoForm, PlotForm, PrivateDetailsForm
+from .forms import (
+    AdvertEditForm,
+    GenerateForm,
+    PhotoForm,
+    PlotForm,
+    PrivateDetailsForm,
+    PublicationForm,
+)
 from .make_webhook import MakeWebhookError, trigger_generation, trigger_publication
 from .models import AdvertDraft, OpenPlotListing, OpenPlotPrivateDetails, PlotPhoto
 from .posters import render_poster
@@ -222,11 +229,7 @@ def review_details(request, public_id):
 @login_required
 def generate_advert(request, public_id):
     plot = owned_plot(request, public_id)
-    if (
-        settings.MAKE_WEBHOOK_URL
-        and plot.status == OpenPlotListing.Status.REVIEW
-        and hasattr(plot, "advert")
-    ):
+    if plot.status == OpenPlotListing.Status.REVIEW and hasattr(plot, "advert"):
         return redirect("review-details", public_id=public_id)
     form = GenerateForm(request.POST or None, request.FILES or None)
     has_main_photo = plot.photos.filter(is_main=True).exists()
@@ -263,6 +266,9 @@ def generate_advert(request, public_id):
                             "has_main_photo": has_main_photo,
                             "make_enabled": make_enabled,
                             "request_pending": True,
+                            "generation_status_url": reverse(
+                                "generation-status", args=[plot.public_id]
+                            ),
                         },
                     )
                 if plot.status in {
@@ -320,6 +326,9 @@ def generate_advert(request, public_id):
                         "make_enabled": make_enabled,
                         "request_sent": True,
                         "request_pending": True,
+                        "generation_status_url": reverse(
+                            "generation-status", args=[plot.public_id]
+                        ),
                     },
                     status=202,
                 )
@@ -339,6 +348,9 @@ def generate_advert(request, public_id):
                             "has_main_photo": has_main_photo,
                             "make_enabled": make_enabled,
                             "request_pending": True,
+                            "generation_status_url": reverse(
+                                "generation-status", args=[plot.public_id]
+                            ),
                         },
                     )
                 if plot.status in {
@@ -403,8 +415,21 @@ def generate_advert(request, public_id):
             "has_main_photo": has_main_photo,
             "make_enabled": make_enabled,
             "request_pending": plot.status == OpenPlotListing.Status.GENERATING,
+            "generation_status_url": reverse("generation-status", args=[plot.public_id]),
         },
     )
+
+
+@login_required
+@require_GET
+def generation_status(request, public_id):
+    plot = owned_plot(request, public_id)
+    response = {"status": plot.status}
+    if plot.status == OpenPlotListing.Status.REVIEW and hasattr(plot, "advert"):
+        response["next_url"] = reverse("review-details", args=[plot.public_id])
+    elif plot.status == OpenPlotListing.Status.FAILED:
+        response["retry_url"] = reverse("generate-advert", args=[plot.public_id])
+    return JsonResponse(response)
 
 
 @login_required
@@ -431,7 +456,15 @@ def advert_preview(request, public_id):
     return render(
         request,
         "properties/advert_preview.html" if hasattr(plot, "advert") else "properties/preview.html",
-        {"plot": plot, "publication_enabled": settings.MAKE_PUBLICATION_ENABLED},
+        {
+            "plot": plot,
+            "publication_enabled": (
+                settings.MAKE_PUBLICATION_ENABLED and bool(settings.MAKE_PUBLICATION_WEBHOOK_URL)
+            ),
+            "publication_form": PublicationForm(
+                initial={"platform": "all" if plot.publication_results else "facebook"}
+            ),
+        },
     )
 
 
@@ -441,8 +474,12 @@ def publish_plot(request, public_id):
     plot = owned_plot(request, public_id)
     if not settings.MAKE_PUBLICATION_ENABLED:
         return HttpResponseBadRequest("Facebook posting is not ready yet.")
-    if not settings.MAKE_WEBHOOK_URL:
+    if not settings.MAKE_PUBLICATION_WEBHOOK_URL:
         return HttpResponseBadRequest("Facebook posting automation is not configured yet.")
+    form = PublicationForm(request.POST)
+    if not form.is_valid():
+        return HttpResponseBadRequest("Choose Facebook, Instagram, or both.")
+    requested_platforms = form.platforms
     request_id = uuid4()
     with transaction.atomic():
         plot = OpenPlotListing.objects.select_for_update().get(pk=plot.pk, broker=request.user)
@@ -453,9 +490,26 @@ def publish_plot(request, public_id):
             plot.status != OpenPlotListing.Status.APPROVED and not approved_for_retry
         ):
             return HttpResponseBadRequest("Review and approve the details before publishing.")
+        already_published = dict(plot.publication_results)
+        pending_platforms = [
+            platform for platform in requested_platforms if platform not in already_published
+        ]
+        if not pending_platforms:
+            plot.status = OpenPlotListing.Status.PUBLISHED
+            plot.publication_platforms = requested_platforms
+            plot.save(update_fields=["status", "publication_platforms", "updated_at"])
+            return redirect("published-result", public_id=public_id)
         plot.status = OpenPlotListing.Status.PUBLISHING
         plot.publication_request_id = request_id
-        plot.save(update_fields=["status", "publication_request_id", "updated_at"])
+        plot.publication_platforms = requested_platforms
+        plot.save(
+            update_fields=[
+                "status",
+                "publication_request_id",
+                "publication_platforms",
+                "updated_at",
+            ]
+        )
     expires = int(time.time()) + settings.AUTOMATION_IMAGE_TTL_SECONDS
     poster_path = reverse("automation-poster", args=[plot.public_id])
     poster_signature = _poster_signature(plot.public_id, expires)
@@ -465,12 +519,14 @@ def publish_plot(request, public_id):
     callback_url = request.build_absolute_uri(reverse("publication-result", args=[plot.public_id]))
     try:
         trigger_publication(
-            settings.MAKE_WEBHOOK_URL,
+            settings.MAKE_PUBLICATION_WEBHOOK_URL,
             listing_id=str(plot.public_id),
             request_id=str(request_id),
             headline=plot.advert.headline,
             caption=plot.advert.caption,
             hashtags=list(plot.advert.hashtags),
+            platforms=pending_platforms,
+            already_published=already_published,
             poster_url=poster_url,
             publication_result_url=callback_url,
         )

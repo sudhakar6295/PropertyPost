@@ -165,3 +165,22 @@ class AdvertEditForm(BootstrapFormMixin, forms.ModelForm):
             except ValueError as exc:
                 raise ValidationError(str(exc)) from exc
         return cleaned
+
+
+class PublicationForm(BootstrapFormMixin, forms.Form):
+    platform = forms.ChoiceField(
+        label="Where should we post?",
+        choices=(
+            ("facebook", "Facebook"),
+            ("instagram", "Instagram"),
+            ("all", "Facebook and Instagram"),
+        ),
+    )
+
+    @property
+    def platforms(self) -> list[str]:
+        return {
+            "facebook": ["facebook"],
+            "instagram": ["instagram"],
+            "all": ["facebook", "instagram"],
+        }[self.cleaned_data["platform"]]

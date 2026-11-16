@@ -54,6 +54,11 @@ urlpatterns = [
     ),
     path("plots/<uuid:public_id>/review/", broker_views.review_details, name="review-details"),
     path("plots/<uuid:public_id>/generate/", broker_views.generate_advert, name="generate-advert"),
+    path(
+        "plots/<uuid:public_id>/generation-status/",
+        broker_views.generation_status,
+        name="generation-status",
+    ),
     path("plots/<uuid:public_id>/poster/", broker_views.private_poster, name="private-poster"),
     path("plots/<uuid:public_id>/preview/", broker_views.advert_preview, name="advert-preview"),
     path("plots/<uuid:public_id>/publish/", broker_views.publish_plot, name="publish-plot"),

@@ -32,6 +32,7 @@ GOOGLE_CLOUD_PROJECT = required_env("GOOGLE_CLOUD_PROJECT")
 SECRET_KEY = required_env("DJANGO_SECRET_KEY")
 # Management jobs such as migrations do not need the automation credential.
 MAKE_WEBHOOK_URL = os.environ.get("MAKE_WEBHOOK_URL", "").strip()
+MAKE_PUBLICATION_WEBHOOK_URL = os.environ.get("MAKE_PUBLICATION_WEBHOOK_URL", "").strip()
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
@@ -41,6 +42,7 @@ DATABASES = {
         "HOST": required_env("MYSQL_HOST"),
         "PORT": os.environ.get("MYSQL_PORT", "3306"),
         "CONN_MAX_AGE": 60,
+        "CONN_HEALTH_CHECKS": True,
         "OPTIONS": {"charset": "utf8mb4"},
     }
 }

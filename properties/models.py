@@ -89,6 +89,8 @@ class OpenPlotListing(models.Model):
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
     generation_request_id = models.UUIDField(null=True, blank=True)
     publication_request_id = models.UUIDField(null=True, blank=True)
+    publication_platforms = models.JSONField(default=list, blank=True)
+    publication_results = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

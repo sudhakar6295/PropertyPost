@@ -245,7 +245,14 @@ def _generation(listing, data):
 
 
 def _publication(listing, data):
-    if set(data) == {"request_id", "status", "error"} and data["status"] == "failed":
+    is_failure = data.get("status") == "failed"
+    expected_failure_fields = {"request_id", "status", "error"}
+    if is_failure:
+        if set(data) not in (
+            expected_failure_fields,
+            expected_failure_fields | {"external_post_ids"},
+        ):
+            return _error("Invalid publication result fields", 400)
         if (
             listing.status != OpenPlotListing.Status.PUBLISHING
             or str(listing.publication_request_id) != data["request_id"]
@@ -253,10 +260,29 @@ def _publication(listing, data):
             return _error("Listing is not awaiting a publication result", 409)
         if not isinstance(data["error"], str) or len(data["error"]) > 300:
             return _error("Invalid error message", 400)
+        try:
+            partial_posts = (
+                _validated_external_posts(data["external_post_ids"])
+                if "external_post_ids" in data
+                else {}
+            )
+        except ValueError:
+            return _error("Invalid external post IDs", 400)
+        allowed = set(listing.publication_platforms or ["facebook"])
+        if not set(partial_posts).issubset(allowed):
+            return _error("Unexpected publication platform", 400)
+        listing.publication_results = {**listing.publication_results, **partial_posts}
         listing.status = OpenPlotListing.Status.FAILED
-        listing.save(update_fields=["status", "updated_at"])
-        return {"request_id": data["request_id"], "status": "failed"}
-    if set(data) != {"request_id", "status", "external_post_id"}:
+        listing.save(update_fields=["status", "publication_results", "updated_at"])
+        return {
+            "request_id": data["request_id"],
+            "status": "failed",
+            "external_post_ids": listing.publication_results,
+        }
+    if set(data) not in (
+        {"request_id", "status", "external_post_id"},
+        {"request_id", "status", "external_post_ids"},
+    ):
         return _error("Invalid publication result fields", 400)
     if (
         listing.status != OpenPlotListing.Status.PUBLISHING
@@ -264,12 +290,42 @@ def _publication(listing, data):
         or str(listing.publication_request_id) != data["request_id"]
     ):
         return _error("Listing is not awaiting a publication result", 409)
-    post_id = data["external_post_id"]
-    if not isinstance(post_id, str) or not post_id.strip() or len(post_id) > 200:
-        return _error("Invalid external post ID", 400)
+    try:
+        new_posts = _validated_external_posts(
+            data.get("external_post_ids", data.get("external_post_id"))
+        )
+    except ValueError:
+        return _error("Invalid external post IDs", 400)
+    allowed = set(listing.publication_platforms or ["facebook"])
+    if not set(new_posts).issubset(allowed):
+        return _error("Unexpected publication platform", 400)
+    results = {**listing.publication_results, **new_posts}
+    if not allowed.issubset(results):
+        return _error("A result is required for each selected platform", 400)
+    listing.publication_results = results
     listing.status = OpenPlotListing.Status.PUBLISHED
-    listing.save(update_fields=["status", "updated_at"])
-    return {"request_id": data["request_id"], "status": "published", "external_post_id": post_id}
+    listing.save(update_fields=["status", "publication_results", "updated_at"])
+    return {
+        "request_id": data["request_id"],
+        "status": "published",
+        "external_post_ids": results,
+    }
+
+
+def _validated_external_posts(value):
+    if isinstance(value, str):
+        value = {"facebook": value}
+    if not isinstance(value, dict) or not value:
+        raise ValueError("External post IDs must be a nonempty object.")
+    if any(
+        platform not in {"facebook", "instagram"}
+        or not isinstance(post_id, str)
+        or not post_id.strip()
+        or len(post_id) > 200
+        for platform, post_id in value.items()
+    ):
+        raise ValueError("External post IDs are invalid.")
+    return {platform: post_id.strip() for platform, post_id in value.items()}
 
 
 @csrf_exempt

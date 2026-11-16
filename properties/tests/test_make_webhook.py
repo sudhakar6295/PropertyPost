@@ -63,6 +63,8 @@ def test_publication_event_contains_approved_content_and_signed_urls_only():
             headline="Open plot near ORR",
             caption="Ready to build. Call today.",
             hashtags=["#OpenPlot"],
+            platforms=["facebook", "instagram"],
+            already_published={"facebook": "existing-post"},
             poster_url="https://propertypost.example.invalid/api/v1/poster/?expires=123&signature=abc",
             publication_result_url="https://propertypost.example.invalid/api/v1/result/",
         )
@@ -73,6 +75,8 @@ def test_publication_event_contains_approved_content_and_signed_urls_only():
     assert payload["headline"] == "Open plot near ORR"
     assert payload["caption"] == "Ready to build. Call today."
     assert payload["hashtags"] == ["#OpenPlot"]
+    assert payload["platforms"] == ["facebook", "instagram"]
+    assert payload["already_published"] == {"facebook": "existing-post"}
     assert payload["message"] == "Open plot near ORR\n\nReady to build. Call today.\n\n#OpenPlot"
     assert payload["poster_url"].startswith("https://")
     assert "private_details" not in payload
