@@ -5,6 +5,7 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,7 +16,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
     name: Deploy verified main revision
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -23,6 +24,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read
     env:
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       REGION: ${{ vars.GCP_REGION }}
@@ -30,15 +32,28 @@ jobs:
       SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
       PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
       DEPLOYER: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+      COMMIT_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       RUNTIME_SA: propertypost-runtime@praxis-citron-469206-c8.iam.gserviceaccount.com
       BUCKET: propertypost-private-105269730029
-      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPOSITORY }}/propertypost:${{ github.event.workflow_run.head_sha }}
+      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPOSITORY }}/propertypost:${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
     steps:
+      - name: Require CI success for manual deploy
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          response="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${COMMIT_SHA}&per_page=100")"
+          jq -e --arg sha "$COMMIT_SHA" \
+            '[.workflow_runs[] | select(.head_sha == $sha and .event == "push" and .conclusion == "success")] | length > 0' \
+            <<< "$response" >/dev/null || {
+              echo "Refusing to deploy: CI has not passed for selected commit $COMMIT_SHA."
+              exit 1
+            }
+
       - name: Check out the exact CI commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ env.COMMIT_SHA }}
           persist-credentials: false
 
       - name: Authenticate with GitHub OIDC
