@@ -5,6 +5,8 @@ import hmac
 import json
 import logging
 import time
+from datetime import timedelta
+from io import BytesIO
 from uuid import UUID
 
 from django.conf import settings
@@ -12,17 +14,29 @@ from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from PIL import Image, UnidentifiedImageError
 
 from .advert_versions import finish_job, next_version_number
 from .captions import validate_generated_caption
-from .models import AdvertDraft, AutomationJob, AutomationReceipt, OpenPlotListing, PlotPhoto
+from .models import (
+    AdvertDraft,
+    AutomationJob,
+    AutomationReceipt,
+    OpenPlotListing,
+    PlotPhoto,
+    SocialPublicationAttempt,
+)
 from .posters import render_poster
 from .repositories.django import _to_public_domain
 from .serializers import serialize_public_details
 from .services import object_store
 
 logger = logging.getLogger(__name__)
+
+MAX_SIGNED_POSTER_BYTES = 20 * 1024 * 1024
+MAX_SIGNED_POSTER_PIXELS = 20_000_000
 
 
 def _error(message, status):
@@ -129,14 +143,55 @@ def signed_poster(request, public_id):
         request.GET.get("signature", ""), _poster_signature(public_id, expires)
     ):
         return _error("Invalid poster link", 403)
+    requested_format = request.GET.get("format", "png")
+    if requested_format not in {"png", "jpeg"}:
+        return _error("Unsupported poster format", 400)
     listing = get_object_or_404(OpenPlotListing, public_id=public_id)
-    if listing.status != OpenPlotListing.Status.PUBLISHING:
-        return _error("Listing is not awaiting publication", 409)
     advert = get_object_or_404(AdvertDraft, listing=listing)
-    response = HttpResponse(object_store().download(advert.poster_path), content_type="image/png")
+    if listing.status != OpenPlotListing.Status.PUBLISHING:
+        direct_attempt = (
+            requested_format == "jpeg"
+            and SocialPublicationAttempt.objects.filter(
+                listing=listing,
+                advert_version_number=advert.version_number,
+                created_at__gte=timezone.now() - timedelta(hours=1),
+            ).exists()
+        )
+        if not direct_attempt:
+            return _error("Listing is not awaiting publication", 409)
+    poster_bytes = object_store().download(advert.poster_path)
+    if requested_format == "jpeg":
+        try:
+            poster_bytes = _bounded_jpeg(poster_bytes)
+        except (OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError):
+            return _error("Invalid poster image", 422)
+    content_type = "image/jpeg" if requested_format == "jpeg" else "image/png"
+    response = HttpResponse(poster_bytes, content_type=content_type)
     response["Cache-Control"] = "private, no-store"
     response["X-Content-Type-Options"] = "nosniff"
     return response
+
+
+def _bounded_jpeg(poster_bytes: bytes) -> bytes:
+    """Convert a bounded approved PNG poster to an opaque JPEG for Meta fetches."""
+    if not isinstance(poster_bytes, bytes) or len(poster_bytes) > MAX_SIGNED_POSTER_BYTES:
+        raise ValueError("poster size outside conversion limit")
+    with Image.open(BytesIO(poster_bytes)) as source:
+        if source.format != "PNG" or source.width * source.height > MAX_SIGNED_POSTER_PIXELS:
+            raise ValueError("poster type or dimensions outside conversion limit")
+        source.load()
+        if source.mode in {"RGBA", "LA"} or "transparency" in source.info:
+            rgba = source.convert("RGBA")
+            image = Image.new("RGB", rgba.size, "white")
+            image.paste(rgba, mask=rgba.getchannel("A"))
+        else:
+            image = source.convert("RGB")
+        converted = BytesIO()
+        image.save(converted, format="JPEG", quality=88, optimize=False)
+    result = converted.getvalue()
+    if len(result) > MAX_SIGNED_POSTER_BYTES:
+        raise ValueError("converted poster exceeds limit")
+    return result
 
 
 def _payload(request):

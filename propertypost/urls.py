@@ -5,7 +5,7 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
-from properties import api_views, broker_views
+from properties import api_views, broker_views, social_publish_views, social_views
 
 from .health import health, ready
 
@@ -41,6 +41,14 @@ urlpatterns = [
     path("login/", broker_views.broker_login, name="broker-login"),
     path("logout/", broker_views.broker_logout, name="broker-logout"),
     path("dashboard/", broker_views.dashboard, name="dashboard"),
+    path("accounts/social/", social_views.social_accounts, name="social-accounts"),
+    path("accounts/social/meta/connect/", social_views.meta_connect, name="meta-connect"),
+    path("accounts/social/meta/callback/", social_views.meta_callback, name="meta-callback"),
+    path(
+        "accounts/social/<int:account_id>/disconnect/",
+        social_views.meta_disconnect,
+        name="meta-disconnect",
+    ),
     path("plots/add/", broker_views.add_plot, name="add-plot"),
     path("plots/<uuid:public_id>/edit/", broker_views.edit_plot, name="edit-plot"),
     path("plots/<uuid:public_id>/photos/", broker_views.upload_photos, name="upload-photos"),
@@ -73,6 +81,11 @@ urlpatterns = [
     path("plots/<uuid:public_id>/poster/", broker_views.private_poster, name="private-poster"),
     path("plots/<uuid:public_id>/preview/", broker_views.advert_preview, name="advert-preview"),
     path("plots/<uuid:public_id>/publish/", broker_views.publish_plot, name="publish-plot"),
+    path(
+        "plots/<uuid:public_id>/publish/meta/",
+        social_publish_views.publish_social,
+        name="publish-social",
+    ),
     path(
         "plots/<uuid:public_id>/published/",
         broker_views.published_result,

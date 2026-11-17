@@ -21,6 +21,7 @@
         <a class="navbar-brand fw-semibold" href="{% url 'dashboard' %}"><span class="brand-mark" aria-hidden="true">P</span>PropertyPost</a>
         {% if user.is_authenticated %}<div class="d-flex gap-2 align-items-center">
           <a class="btn btn-outline-light btn-sm" href="{% url 'dashboard' %}">My plots</a>
+          <a class="btn btn-outline-light btn-sm" href="{% url 'social-accounts' %}">Social accounts</a>
           <form method="post" action="{% url 'broker-logout' %}">{% csrf_token %}<button class="btn btn-light btn-sm" type="submit">Sign out</button></form>
         </div>{% endif %}
       </div>

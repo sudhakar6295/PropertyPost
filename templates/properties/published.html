@@ -2,10 +2,16 @@
 {% block title %}Advert posting | PropertyPost{% endblock %}
 {% block content %}
 <div class="container page-shell"><div class="row justify-content-center"><div class="col-12 col-lg-8">
+  {% if messages %}{% for message in messages %}<div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% else %}secondary{% endif %}" role="status">{{ message }}</div>{% endfor %}{% endif %}
   <p class="eyebrow">POSTING RESULT</p><h1 class="page-title display-6">{{ plot.title }}</h1>
   {% if plot.status == 'publishing' %}<div class="alert alert-info p-4" role="status"><h2 class="h5 fw-bold">Your advert is being posted</h2><p class="mb-0">You can leave this page. Come back to see the result.</p></div>
-  {% elif plot.status == 'published' %}<div class="alert alert-success p-4"><h2 class="h5 fw-bold">Your advert is published</h2><p class="mb-0">The posting details are saved here.</p></div>{% endif %}
+  {% elif plot.status == 'published' %}<div class="alert alert-success p-4"><h2 class="h5 fw-bold">Your advert is published</h2><p class="mb-0">The posting details are saved here.</p></div>
+  {% elif plot.status == 'failed' %}<div class="alert alert-warning p-4" role="status"><h2 class="h5 fw-bold">Some posts need attention</h2><p class="mb-0">Check each target below. An uncertain result may mean the Page received the post; some failures need support.</p></div>{% endif %}
   {% if plot.publication_results %}<section class="card mb-4"><div class="card-body p-4"><h2 class="section-heading">Where it was posted</h2>{% for platform, post_id in plot.publication_results.items %}<p class="mb-2"><strong>{{ platform|title }}:</strong> Posted <span class="small text-secondary d-block">Post reference: {{ post_id }}</span></p>{% endfor %}</div></section>{% endif %}
+  {% if social_publication_attempts %}<section class="card mb-4"><div class="card-body p-4"><h2 class="section-heading">Meta Page results</h2>{% for attempt in social_publication_attempts %}<div class="border-bottom py-3"><p class="mb-1"><strong>{{ attempt.social_connection.page_name }}</strong> · {{ attempt.get_platform_display }} · {{ attempt.get_status_display }}</p>{% if attempt.status == 'succeeded' and attempt.external_post_id %}<p class="small text-secondary mb-0">Post reference: {{ attempt.external_post_id }}</p>{% elif attempt.error_code == 'token_expired' or attempt.error_code == 'token_invalid' %}<p class="small text-warning-emphasis mb-0">Reconnect this Page, then retry this target.</p>{% elif attempt.error_code == 'media_not_ready' %}<p class="small text-secondary mb-0">Instagram is still processing this media. Retrying will check the existing media container.</p>{% elif attempt.status == 'uncertain' %}<p class="small text-warning-emphasis mb-0">Check this Page before taking another step.</p>{% elif attempt.status == 'failed' %}<p class="small text-secondary mb-0">Contact support before retrying this target.</p>{% endif %}</div>{% endfor %}
+    {% if social_connections_need_attention %}<p class="mt-3 mb-0">A connected Page needs attention. <a href="{% url 'social-accounts' %}">Manage social accounts</a>.</p>{% endif %}
+    {% if plot.status == 'failed' %}<p class="mt-3 mb-0">Return to the <a href="{% url 'advert-preview' plot.public_id %}">advert preview</a> to review its saved details.</p>{% endif %}
+  </div></section>{% endif %}
   <div class="d-flex flex-wrap gap-2"><a class="btn btn-outline-primary" href="{% url 'advert-preview' plot.public_id %}">View advert</a><a class="btn btn-outline-secondary" href="{% url 'advert-history' plot.public_id %}">Advert history</a>{% if plot.status == 'published' %}<form method="post" action="{% url 'revise-published-advert' plot.public_id %}">{% csrf_token %}<button class="btn btn-primary" type="submit">Edit this advert</button></form>{% endif %}<a class="btn btn-link" href="{% url 'dashboard' %}">My plots</a></div>
 </div></div></div>
 {% if plot.status == 'publishing' %}
@@ -19,7 +25,7 @@
       if (result.status === "published" || result.status === "failed") {
         window.location.assign(result.next_url);
       } else if (result.unconfirmed) {
-        document.querySelector("[role=status]").textContent = "Posting has not been confirmed. Check your Facebook or Instagram page before trying again.";
+        document.querySelector("[role=status]").textContent = "Posting is still unconfirmed. Check your Facebook or Instagram Page before taking another step.";
         window.clearInterval(timer);
       }
     } catch (_) { /* Retry while the connection is unavailable. */ }

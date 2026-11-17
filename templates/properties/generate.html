@@ -2,9 +2,9 @@
 {% block title %}Create advert | PropertyPost{% endblock %}
 {% block content %}
 <div class="container page-shell"><div class="row justify-content-center"><div class="col-12 col-lg-8">
-  <p class="eyebrow">STEP 4 OF 4 · CREATE ADVERT</p><h1 class="page-title display-6">Make your poster and text</h1>
+  <p class="eyebrow">STEP 4 · MAKE ADVERT</p><h1 class="page-title display-6">Make your poster and text</h1>
   <p class="page-intro">Choose a design and language. We will use your main photo and the plot details you checked.</p>
-  <div class="step-row" aria-label="Advert steps"><span class="step-item">1 · Plot details</span><span class="step-divider">›</span><span class="step-item">2 · Photos</span><span class="step-divider">›</span><span class="step-item">3 · Review</span><span class="step-divider">›</span><span class="step-item current">4 · Advert</span></div>
+  <nav aria-label="Advert creation steps"><ol class="step-row list-unstyled"><li class="step-item">1 · Plot details</li><li class="step-divider" aria-hidden="true">›</li><li class="step-item">2 · Photos</li><li class="step-divider" aria-hidden="true">›</li><li class="step-item">3 · Check details</li><li class="step-divider" aria-hidden="true">›</li><li class="step-item current" aria-current="step">4 · Make advert</li></ol></nav>
   {% if plot.status == 'failed' %}<div class="alert alert-warning" role="alert">Advert creation did not finish. You can try again.</div>{% endif %}
   {% if request_pending %}<div id="generation-progress" class="alert alert-info" role="status" data-status-url="{{ generation_status_url }}"><strong>Your advert is in progress.</strong> You can leave this page and return later. Your poster and text will be saved here when ready.</div>{% endif %}
   {% if not has_main_photo %}<div class="alert alert-warning" role="alert"><h2 class="h6">Add a main photo to continue</h2><p>Upload a photo and choose “Main photo”. Then come back here.</p><a class="btn btn-outline-primary" href="{% url 'upload-photos' plot.public_id %}">Upload or choose a main photo</a></div>{% endif %}

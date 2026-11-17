@@ -5,12 +5,12 @@
 <div class="container page-shell"><div class="row justify-content-center"><div class="col-12 col-xl-10">
   <p class="eyebrow">PLOT PHOTOS</p><h1 class="page-title display-6">Upload photos</h1>
   <p class="page-intro">Add clear photos of {{ plot.title }}. You need at least one main photo to make the poster.</p>
-  <div class="step-row" aria-label="Advert steps"><span class="step-item">1 · Plot details</span><span class="step-divider">›</span><span class="step-item current">2 · Photos</span><span class="step-divider">›</span><span class="step-item">3 · Review</span><span class="step-divider">›</span><span class="step-item">4 · Advert</span></div>
+  <nav aria-label="Advert creation steps"><ol class="step-row list-unstyled"><li class="step-item">1 · Plot details</li><li class="step-divider" aria-hidden="true">›</li><li class="step-item current" aria-current="step">2 · Photos</li><li class="step-divider" aria-hidden="true">›</li><li class="step-item">3 · Check details</li><li class="step-divider" aria-hidden="true">›</li><li class="step-item">4 · Make advert</li></ol></nav>
   <div class="row g-4">
     <div class="col-lg-7">
       <section class="card h-100"><div class="card-body p-4">
         <div class="d-flex justify-content-between align-items-center gap-2 mb-3"><h2 class="section-heading mb-0">Your photos</h2><span class="status-pill">{{ plot.photos.count }} uploaded</span></div>
-        <p class="small text-secondary">Tap “Main photo” on your best photo, then save. The first photo is used on the poster.</p>
+        <p class="photo-help text-secondary mb-3">Choose <strong>Main photo</strong> on the picture you want on your poster. Use <strong>Earlier</strong> and <strong>Later</strong> only to change the order of your photos.</p>
         <form method="post" action="{% url 'arrange-photos' plot.public_id %}">{% csrf_token %}
           <div class="row g-3 mb-3" id="photo-grid">
           {% for photo in plot.photos.all %}
@@ -23,7 +23,7 @@
             </div></div>
           {% empty %}<div class="col-12"><div class="notice-strip text-center">No photos yet. Add one using the form.</div></div>{% endfor %}
           </div>
-          {% if plot.photos.exists %}<button class="btn btn-outline-primary" type="submit">Save main photo and order</button>{% endif %}
+          {% if plot.photos.exists %}<button class="btn btn-outline-primary" type="submit">Save photo choices</button>{% endif %}
         </form>
       </div></section>
     </div>

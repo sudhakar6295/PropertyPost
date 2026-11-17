@@ -10,8 +10,8 @@
       <span class="status-pill">PUBLIC</span><h2 class="section-heading mt-3">Shown in your advert</h2>
       <form method="post">{% csrf_token %}{{ advert_form.non_field_errors }}
         {% for field in advert_form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}
-        <p class="small text-secondary">When it looks right, approve it. You will choose where to post on the next page.</p>
-        <div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary" name="intent" value="save" type="submit">Save words</button><button class="btn btn-primary" name="intent" value="approve" type="submit">Looks good · Continue</button></div>
+        <p class="small text-secondary">Approving saves this advert for you to review. The next page will show whether posting is available.</p>
+        <div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary" name="intent" value="save" type="submit">Save advert text</button><button class="btn btn-primary" name="intent" value="approve" type="submit">Approve advert and continue</button></div>
       </form>
       <a class="btn btn-link px-0 mt-2" href="{% url 'generate-advert' plot.public_id %}">Try another design or language</a>
     </div></section></div>

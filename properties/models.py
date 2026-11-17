@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 
 from .validators import phone_number_validator
@@ -256,3 +256,96 @@ class AutomationReceipt(models.Model):
 
     def __str__(self) -> str:
         return f"{self.kind} {self.request_id}"
+
+
+class SocialAccountConnection(models.Model):
+    """A broker-owned Meta Page connection. The token field stores ciphertext only."""
+
+    class Status(models.TextChoices):
+        CONNECTED = "connected", "Connected"
+        RECONNECT_REQUIRED = "reconnect_required", "Reconnect required"
+        DISCONNECTED = "disconnected", "Disconnected"
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="social_account_connections",
+    )
+    facebook_page_id = models.CharField(
+        max_length=32,
+        validators=[RegexValidator(r"^\d+$", "Facebook Page ID must be numeric.")],
+    )
+    page_name = models.CharField(max_length=160)
+    instagram_account_id = models.CharField(max_length=32, blank=True)
+    instagram_username = models.CharField(max_length=100, blank=True)
+    encrypted_page_access_token = models.TextField(blank=True)
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.CONNECTED)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("owner", "facebook_page_id"), name="unique_owner_facebook_page"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Meta Page connection {self.pk}"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.status == self.Status.CONNECTED and not self.encrypted_page_access_token:
+            raise ValidationError(
+                {"encrypted_page_access_token": "Connected accounts need a token."}
+            )
+
+
+class SocialPublicationAttempt(models.Model):
+    """One broker-authorized attempt to publish an advert to a Meta target."""
+
+    class Platform(models.TextChoices):
+        FACEBOOK = "facebook", "Facebook"
+        INSTAGRAM = "instagram", "Instagram"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+        UNCERTAIN = "uncertain", "Uncertain"
+
+    listing = models.ForeignKey(
+        OpenPlotListing, on_delete=models.CASCADE, related_name="social_publications"
+    )
+    social_connection = models.ForeignKey(
+        SocialAccountConnection, on_delete=models.PROTECT, related_name="publication_attempts"
+    )
+    advert_version_number = models.PositiveIntegerField()
+    platform = models.CharField(max_length=10, choices=Platform.choices)
+    instagram_container_id = models.CharField(max_length=100, blank=True)
+    request_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    external_post_id = models.CharField(max_length=100, blank=True)
+    error_code = models.CharField(max_length=40, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("listing", "social_connection", "advert_version_number", "platform"),
+                name="unique_social_publication_target",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.platform} publication {self.request_id}"
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.listing_id
+            and self.social_connection_id
+            and self.listing.broker_id != self.social_connection.owner_id
+        ):
+            raise ValidationError({"social_connection": "Connection belongs to another broker."})

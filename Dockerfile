@@ -15,5 +15,5 @@ RUN groupadd --system app && useradd --system --gid app --home /app app \
 USER app
 EXPOSE 8080
 CMD ["uv", "run", "--no-sync", "gunicorn", "propertypost.wsgi:application", \
-     "--bind", "0.0.0.0:8080", "--workers", "2", "--access-logfile", "-", \
+     "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "50", "--access-logfile", "-", \
      "--access-logformat", "%(h)s %(s)s %(b)s"]

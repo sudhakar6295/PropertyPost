@@ -86,6 +86,12 @@ AUTOMATION_HMAC_SECRET = ""
 AUTOMATION_MAX_SKEW_SECONDS = 300
 AUTOMATION_IMAGE_TTL_SECONDS = 300
 MAKE_JOB_TIMEOUT_SECONDS = int(os.environ.get("MAKE_JOB_TIMEOUT_SECONDS", "900"))
+META_TOKEN_ENCRYPTION_KEY = os.environ.get("META_TOKEN_ENCRYPTION_KEY", "")
+META_APP_ID = os.environ.get("META_APP_ID", "")
+META_APP_SECRET = os.environ.get("META_APP_SECRET", "")
+META_REDIRECT_URI = os.environ.get("META_REDIRECT_URI", "")
+META_GRAPH_VERSION = os.environ.get("META_GRAPH_VERSION", "v27.0")
+META_MULTI_TENANT_ENABLED = os.environ.get("META_MULTI_TENANT_ENABLED", "false").lower() == "true"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",

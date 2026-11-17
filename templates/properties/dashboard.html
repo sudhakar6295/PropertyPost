@@ -14,11 +14,11 @@
         <h2 class="h4 fw-bold mb-2">{{ plot.title }}</h2>
         <div class="listing-meta mb-3"><span class="meta-chip">{{ plot.location }}</span><span class="meta-chip">{{ plot.area }} {{ plot.get_area_unit_display }}</span></div>
         <p class="fs-5 fw-bold mb-0">₹{{ plot.total_price }}</p>
-        <p class="small text-secondary mt-2 mb-0">{% if plot.status == 'generating' %}We are making your advert. You can come back later.{% elif plot.status == 'review' %}Your advert is ready. Check the poster and words before posting.{% elif plot.status == 'approved' %}Your advert is approved and ready to post.{% elif plot.status == 'publishing' %}Posting is in progress. Check the result here.{% elif plot.status == 'published' %}Your posting result is saved here.{% elif plot.status == 'failed' %}This step did not finish. Open the plot to try again.{% else %}Add photos and make an advert when you are ready.{% endif %}</p>
+        <p class="small text-secondary mt-2 mb-0">{% if plot.status == 'generating' %}We are making your advert. You can come back later.{% elif plot.status == 'review' %}Your advert is ready. Check the poster and text.{% elif plot.status == 'approved' %}Your advert is approved. Open it to see the next available step.{% elif plot.status == 'publishing' %}Your advert is being posted. Check the result here.{% elif plot.status == 'published' %}Your posting result is saved here.{% elif plot.status == 'failed' %}This step did not finish. Open your advert to check what happened.{% else %}Add photos and make an advert when you are ready.{% endif %}</p>
         <div class="listing-actions d-flex flex-wrap gap-2">
           {% if plot.status == 'generating' %}<a class="btn btn-primary btn-sm" href="{% url 'generate-advert' plot.public_id %}">Advert in progress</a>
           {% elif plot.status == 'review' %}<a class="btn btn-primary btn-sm" href="{% url 'review-details' plot.public_id %}">Review advert</a>
-          {% elif plot.status == 'approved' %}<a class="btn btn-primary btn-sm" href="{% url 'advert-preview' plot.public_id %}">View advert</a>
+          {% elif plot.status == 'approved' %}<a class="btn btn-primary btn-sm" href="{% url 'advert-preview' plot.public_id %}">Open approved advert</a>
           {% elif plot.status == 'publishing' or plot.status == 'published' %}<a class="btn btn-primary btn-sm" href="{% url 'published-result' plot.public_id %}">Posting result</a>
           {% elif plot.status == 'failed' and plot.publication_request_id %}<a class="btn btn-primary btn-sm" href="{% url 'advert-preview' plot.public_id %}">Check posting</a>
           {% else %}<a class="btn btn-primary btn-sm" href="{% url 'generate-advert' plot.public_id %}">Create advert</a>{% endif %}

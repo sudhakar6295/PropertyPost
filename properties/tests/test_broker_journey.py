@@ -49,7 +49,13 @@ def test_local_journey(client, django_user_model, settings, tmp_path):
     plot = OpenPlotListing.objects.get(broker=broker)
     assert response.status_code == 302
     assert response.url == reverse("upload-photos", args=[plot.public_id])
-    assert client.get(response.url).status_code == 200
+    photo_page = client.get(response.url)
+    assert photo_page.status_code == 200
+    assert b'<nav aria-label="Advert creation steps">' in photo_page.content
+    assert b'<li class="step-item current" aria-current="step">' in photo_page.content
+    assert b"Photos</li>" in photo_page.content
+    assert b"Choose <strong>Main photo</strong>" in photo_page.content
+    assert b"only to change the order" in photo_page.content
     image_bytes = BytesIO()
     Image.new("RGB", (24, 24), "green").save(image_bytes, format="PNG")
     upload = SimpleUploadedFile("plot.png", image_bytes.getvalue(), content_type="image/png")
@@ -64,12 +70,20 @@ def test_local_journey(client, django_user_model, settings, tmp_path):
         client.post(order_url, {"photo_order": [photo.pk], "main_photo": photo.pk}).status_code
         == 302
     )
+    make_advert = client.get(reverse("generate-advert", args=[plot.public_id]))
+    assert b"STEP 4" in make_advert.content
+    assert b"MAKE ADVERT" in make_advert.content
+    assert b'aria-current="step"' in make_advert.content
+    assert b"STEP 4 OF 4" not in make_advert.content
     assert client.get(reverse("edit-plot", args=[plot.public_id])).status_code == 200
     review_url = reverse("review-details", args=[plot.public_id])
     details = client.get(review_url)
     assert details.status_code == 200
     assert b"Shown in your advert" in details.content
     assert b"Private notes" in details.content
+    assert b'aria-current="step"' in details.content
+    assert b"Check details" in details.content
+    assert b"STEP 3 OF 4" not in details.content
     assert client.post(reverse("publish-plot", args=[plot.public_id])).status_code == 400
     generation = client.post(
         reverse("generate-advert", args=[plot.public_id]), {"template": "classic"}
@@ -79,6 +93,9 @@ def test_local_journey(client, django_user_model, settings, tmp_path):
     review = client.get(review_url)
     assert b"Shown in your advert" in review.content
     assert b"Private notes" in review.content
+    assert b"Approve advert and continue" in review.content
+    assert b"The next page will show whether posting is available." in review.content
+    assert b"choose where to post" not in review.content
     advert = plot.advert
     assert (
         client.post(
@@ -94,7 +111,9 @@ def test_local_journey(client, django_user_model, settings, tmp_path):
     preview = client.get(reverse("advert-preview", args=[plot.public_id]))
     assert OpenPlotListing.objects.get(pk=plot.pk).status == OpenPlotListing.Status.APPROVED
     assert preview.status_code == 200
-    assert b"Posting options are being set up" in preview.content
+    assert b"Posting is not available yet" in preview.content
+    assert b"Where should we post?" not in preview.content
+    assert b"Post advert to this account" not in preview.content
     assert b"Publish to Facebook" not in preview.content
     assert b"Owner Alice" not in preview.content
     assert b"Do not share" not in preview.content
@@ -102,6 +121,10 @@ def test_local_journey(client, django_user_model, settings, tmp_path):
     settings.MAKE_PUBLICATION_WEBHOOK_URL = "https://hook.example.invalid/publication-token"
     settings.AUTOMATION_HMAC_SECRET = "test-only-automation-secret"
     settings.MAKE_PUBLICATION_ENABLED = True
+    ready_preview = client.get(reverse("advert-preview", args=[plot.public_id]))
+    assert b"READY TO POST" in ready_preview.content
+    assert b"Post advert to this account" in ready_preview.content
+    assert b"Posting is not available yet" not in ready_preview.content
     with patch("properties.broker_views.trigger_publication") as publication:
         publish_response = client.post(
             reverse("publish-plot", args=[plot.public_id]), {"platform": "facebook"}

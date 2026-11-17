@@ -81,6 +81,16 @@ Local and production login both use Django username/password authentication and 
 sessions stored in the configured MySQL database. Create broker accounts through Django's
 superuser/admin tooling; no external authentication provider is required.
 
+## Broker-owned social accounts
+
+The optional Meta connection flow lets each broker link their own Facebook Page and its
+linked Instagram professional account. Page tokens are encrypted in MySQL and are never
+sent to Make.com. Direct publishing records a separate result for each Page, platform,
+and advert version. The feature is off by default (`META_MULTI_TENANT_ENABLED=false`),
+so existing Make publication continues until Meta app setup and testing are complete.
+See the [multi-tenant rollout plan](docs/social-multitenancy.md) for permissions,
+configuration, cost and launch checks.
+
 ## Quality checks
 
 The [CI workflow](.github/workflows/ci.yml) runs for pushes to `main` and on manual

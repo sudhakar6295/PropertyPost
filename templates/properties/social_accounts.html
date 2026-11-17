@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Social accounts | PropertyPost{% endblock %}
+{% block content %}
+<div class="container page-shell">
+  {% if messages %}{% for message in messages %}<div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% else %}secondary{% endif %}" role="status">{{ message }}</div>{% endfor %}{% endif %}
+  <div class="mb-4">
+    <p class="eyebrow">ACCOUNT SETTINGS</p>
+    <h1 class="page-title display-6">Social accounts</h1>
+    <p class="page-intro mb-0">Connect a Facebook Page and its linked Instagram account for future publishing.</p>
+  </div>
+  {% if not meta_available %}
+  <div class="alert alert-secondary" role="status">Meta account connection is not available right now.</div>
+  {% else %}
+  <div class="card mb-4"><div class="card-body p-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+    <div><h2 class="h5 fw-bold mb-1">Connect Meta</h2><p class="text-secondary mb-0">Choose the Page you manage and allow access to its linked Instagram account.</p></div>
+    <a class="btn btn-primary" href="{% url 'meta-connect' %}">Connect Facebook Page</a>
+  </div></div>
+  {% endif %}
+  <h2 class="h4 fw-bold mb-3">Connected Pages</h2>
+  <div class="row g-3">
+    {% for account in accounts %}
+    <div class="col-12 col-md-6"><article class="card h-100"><div class="card-body p-4">
+      <div class="d-flex justify-content-between gap-3 align-items-start">
+        <div><p class="eyebrow mb-1">FACEBOOK PAGE</p><h3 class="h5 fw-bold mb-2">{{ account.page_name }}</h3>
+          {% if account.instagram_username %}<p class="mb-0 text-secondary">Instagram · @{{ account.instagram_username }}</p>{% elif account.instagram_account_id %}<p class="mb-0 text-secondary">Instagram account linked</p>{% else %}<p class="mb-0 text-secondary">No linked Instagram account</p>{% endif %}
+        </div><span class="status-pill">{{ account.get_status_display|default:account.status }}</span>
+      </div>
+      <form method="post" action="{% url 'meta-disconnect' account.pk %}" class="mt-3">{% csrf_token %}<button class="btn btn-outline-danger btn-sm" type="submit">Disconnect</button></form>
+    </div></article></div>
+    {% empty %}<div class="col-12"><p class="text-secondary">No social accounts are connected.</p></div>{% endfor %}
+  </div>
+</div>
+{% endblock %}

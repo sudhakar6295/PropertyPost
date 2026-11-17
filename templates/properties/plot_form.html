@@ -4,7 +4,7 @@
 <div class="container py-4 py-lg-5">
   <div class="row justify-content-center"><div class="col-12 col-xl-10">
     <a href="{% url 'dashboard' %}" class="text-decoration-none">← My plots</a>
-    <header class="mt-3 mb-4"><p class="eyebrow">STEP 1 OF 4 · PLOT DETAILS</p><h1 class="page-title h2">{% if plot %}Edit plot details{% else %}Add a plot{% endif %}</h1><p class="page-intro">Enter what you know about the land. Fields marked * are required. You can change these details later.</p></header>
+    <header class="mt-3 mb-4"><p class="eyebrow">STEP 1 · PLOT DETAILS</p><h1 class="page-title h2">{% if plot %}Edit plot details{% else %}Add a plot{% endif %}</h1><p class="page-intro">Enter what you know about the land. Fields marked * are required. You can change these details later.</p></header>
     <form method="post" novalidate>{% csrf_token %}
       {% if public_form.non_field_errors or private_form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ public_form.non_field_errors }}{{ private_form.non_field_errors }}</div>{% endif %}
       <section class="card border-0 shadow-sm mb-4" aria-labelledby="public-heading"><div class="card-body p-4 p-lg-5">

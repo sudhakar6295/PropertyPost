@@ -2,8 +2,9 @@
 {% block title %}Advert preview | PropertyPost{% endblock %}
 {% block content %}
 <div class="container page-shell"><div class="row justify-content-center"><div class="col-12 col-xl-10">
+  {% if messages %}{% for message in messages %}<div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% else %}secondary{% endif %}" role="status">{{ message }}</div>{% endfor %}{% endif %}
   <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
-    <div><p class="eyebrow">READY TO POST</p><h1 class="page-title display-6">Your finished advert</h1><p class="page-intro mb-0">Check the poster and text once more before posting.</p></div>
+    <div><p class="eyebrow">{% if social_publication_enabled and can_social_publish or publication_enabled and plot.status == 'approved' or publication_enabled and plot.status == 'failed' and plot.publication_request_id %}READY TO POST{% else %}ADVERT PREVIEW{% endif %}</p><h1 class="page-title display-6">Your finished advert</h1><p class="page-intro mb-0">Check the poster and text once more{% if social_publication_enabled and can_social_publish or publication_enabled and plot.status == 'approved' or publication_enabled and plot.status == 'failed' and plot.publication_request_id %} before posting{% else %}.{% endif %}</p></div>
     <div class="d-flex gap-2"><a class="btn btn-outline-secondary btn-sm" href="{% url 'advert-history' plot.public_id %}">Advert history</a>{% if plot.status == 'published' %}<form method="post" action="{% url 'revise-published-advert' plot.public_id %}">{% csrf_token %}<button class="btn btn-outline-primary btn-sm" type="submit">Edit this advert</button></form>{% endif %}</div>
   </div>
   <div class="row g-4">
@@ -12,15 +13,27 @@
       <h2 class="h3 fw-bold">{{ plot.advert.headline }}</h2><p class="caption-text">{{ plot.advert.caption }}</p>
       <p class="text-primary">{% for tag in plot.advert.hashtags %}{{ tag }} {% endfor %}</p>
       {% if plot.publication_results %}<div class="alert alert-success"><strong>Already posted:</strong> {% for platform, post_id in plot.publication_results.items %}{{ platform|title }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+      {% if social_publication_enabled and social_publication_attempts %}<div class="mb-3"><h3 class="h6 fw-bold">Meta posting attempts</h3>{% for attempt in social_publication_attempts %}<p class="small mb-1">{{ attempt.social_connection.page_name }} · {{ attempt.get_platform_display }} · {{ attempt.get_status_display }}{% if attempt.error_code %} — {% if attempt.error_code == 'token_expired' or attempt.error_code == 'token_invalid' %}Reconnect this Page{% elif attempt.error_code == 'media_not_ready' %}Instagram is still processing this media; retry is safe{% elif attempt.status == 'uncertain' %}Check the Page before taking another step{% else %}Could not publish; contact support{% endif %}{% endif %}</p>{% endfor %}</div>{% endif %}
+      {% if social_publication_enabled and can_social_publish %}
+      {% for option in social_publish_options %}<form method="post" action="{% url 'publish-social' plot.public_id %}" class="mt-4 border-top pt-3">{% csrf_token %}
+        <input type="hidden" name="connection" value="{{ option.connection.pk }}">
+        <label class="form-label" for="social-platform-{{ option.connection.pk }}">{{ option.connection.page_name }} — where should we post?</label>
+        <select class="form-select" name="platform" id="social-platform-{{ option.connection.pk }}" required>{% for choice in option.platforms %}<option value="{{ choice.value }}">{{ choice.label }}</option>{% endfor %}</select>
+        {% if plot.status == 'failed' %}<p class="small text-secondary mt-2 mb-0">Only failed targets that are safe to retry are offered.</p>{% elif plot.status == 'published' %}<p class="small text-secondary mt-2 mb-0">Only platforms without a saved post are offered.</p>{% else %}<p class="small text-secondary mt-2 mb-0">Your advert will be posted from the Page you select.</p>{% endif %}
+        <button class="btn btn-primary mt-3" type="submit">{% if plot.status == 'failed' %}Retry this target{% else %}Post from this Page{% endif %}</button>
+      </form>{% endfor %}
+      {% elif social_publication_enabled and plot.status == 'failed' %}<div class="alert alert-warning mt-4" role="status">No failed target is currently safe to retry. Check uncertain posts on the Page, or reconnect an expired account.</div>{% elif social_publication_enabled %}<div class="notice-strip mt-4"><h3 class="h5">No available Meta target</h3><p>Connect a Page or linked Instagram account, or choose a platform that has not already been posted.</p><a class="btn btn-outline-primary" href="{% url 'social-accounts' %}">Manage social accounts</a></div>{% elif social_publication_unavailable %}<div class="alert alert-secondary mt-4" role="status">Direct Meta publishing is not available right now. Please try again later.</div>{% endif %}
+      {% if social_publication_enabled and social_connections_need_attention %}<p class="small text-secondary mt-3">A Page needs attention before it can be used. <a href="{% url 'social-accounts' %}">Review social accounts</a>.</p>{% endif %}
       {% if publication_enabled and plot.status == 'approved' or publication_enabled and plot.status == 'failed' and plot.publication_request_id %}
       <form method="post" action="{% url 'publish-plot' plot.public_id %}" class="mt-4">{% csrf_token %}
         <label class="form-label" for="{{ publication_form.platform.id_for_label }}">{{ publication_form.platform.label }}</label>{{ publication_form.platform }}
-        <p class="small text-secondary mt-2 mb-0">Clicking the button sends this poster and text to the selected account.</p>
-        <button class="btn btn-primary mt-3" type="submit">{% if plot.status == 'failed' %}Try posting again{% else %}Post this advert{% endif %}</button>
+        <p class="small text-secondary mt-2 mb-0">This sends the poster and text to the account you choose below.</p>
+        <button class="btn btn-primary mt-3" type="submit">{% if plot.status == 'failed' %}Try posting to this account again{% else %}Post advert to this account{% endif %}</button>
       </form>
       {% elif plot.status == 'publishing' %}<p class="alert alert-info" role="status">Your post is being processed. Come back in a moment to see the result.</p>
       {% elif plot.status == 'published' %}<p class="alert alert-success">This advert has been published.</p>
-      {% elif plot.status == 'approved' %}<div class="notice-strip mt-4"><label class="form-label" for="{{ publication_form.platform.id_for_label }}">Where should we post?</label>{{ publication_form.platform }}<button class="btn btn-secondary mt-3" type="button" disabled>Posting options are being set up</button><p class="small text-secondary mt-2 mb-0">Your advert is saved and approved. Posting will be available after the social channels are connected.</p></div>{% endif %}
+      {% elif plot.status == 'approved' and not social_publication_enabled and not social_publication_unavailable %}<div class="notice-strip mt-4" role="status"><h3 class="h5">Your advert is approved</h3><p class="mb-0">Posting is not available yet. Your advert is saved here, and you can return to review it later.</p></div>
+      {% elif plot.status == 'failed' and not social_publication_enabled and not social_publication_unavailable %}<p class="alert alert-warning" role="status">Posting did not finish. Your advert is still saved. Please contact your account manager.</p>{% endif %}
     </div></section></div>
   </div>
 </div></div></div>

@@ -4,6 +4,8 @@ import os
 
 from django.core.exceptions import ImproperlyConfigured
 
+from properties.meta_settings import validate_meta_configuration
+
 from .base import *  # noqa: F403
 from .base import MIDDLEWARE as BASE_MIDDLEWARE
 
@@ -33,6 +35,21 @@ SECRET_KEY = required_env("DJANGO_SECRET_KEY")
 # Management jobs such as migrations do not need the automation credential.
 MAKE_WEBHOOK_URL = os.environ.get("MAKE_WEBHOOK_URL", "").strip()
 MAKE_PUBLICATION_WEBHOOK_URL = os.environ.get("MAKE_PUBLICATION_WEBHOOK_URL", "").strip()
+# Meta integration remains optional until explicitly enabled; credentials are environment-only.
+META_APP_ID = os.environ.get("META_APP_ID", "")
+META_APP_SECRET = os.environ.get("META_APP_SECRET", "")
+META_REDIRECT_URI = os.environ.get("META_REDIRECT_URI", "")
+META_GRAPH_VERSION = os.environ.get("META_GRAPH_VERSION", "v27.0")
+META_TOKEN_ENCRYPTION_KEY = os.environ.get("META_TOKEN_ENCRYPTION_KEY", "")
+META_MULTI_TENANT_ENABLED = os.environ.get("META_MULTI_TENANT_ENABLED", "false").lower() == "true"
+validate_meta_configuration(
+    enabled=META_MULTI_TENANT_ENABLED,
+    app_id=META_APP_ID,
+    app_secret=META_APP_SECRET,
+    encryption_key=META_TOKEN_ENCRYPTION_KEY,
+    redirect_uri=META_REDIRECT_URI,
+    graph_version=META_GRAPH_VERSION,
+)
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",

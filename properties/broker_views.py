@@ -4,6 +4,7 @@ import logging
 import time
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from django.conf import settings
@@ -35,6 +36,8 @@ from .models import (
     OpenPlotListing,
     OpenPlotPrivateDetails,
     PlotPhoto,
+    SocialAccountConnection,
+    SocialPublicationAttempt,
 )
 from .posters import render_poster
 from .repositories.django import _to_public_domain
@@ -42,6 +45,58 @@ from .serializers import serialize_public_details
 from .services import object_store
 
 logger = logging.getLogger(__name__)
+SOCIAL_ATTEMPT_STALE_AFTER = timedelta(seconds=90)
+
+
+def reconcile_stale_social_attempts(*, broker=None, listing=None):
+    """Mark timed-out direct Meta calls uncertain without enabling a retry."""
+    cutoff = timezone.now() - SOCIAL_ATTEMPT_STALE_AFTER
+    stale = SocialPublicationAttempt.objects.filter(
+        status=SocialPublicationAttempt.Status.PENDING,
+        updated_at__lt=cutoff,
+    )
+    if broker is not None:
+        stale = stale.filter(listing__broker=broker)
+    if listing is not None:
+        stale = stale.filter(listing=listing)
+    listing_ids = list(
+        stale.order_by().values_list("listing_id", flat=True).distinct().order_by("listing_id")
+    )
+    if not listing_ids:
+        return 0
+
+    reconciled = 0
+    with transaction.atomic():
+        locked_listings = {
+            item.pk: item
+            for item in OpenPlotListing.objects.select_for_update()
+            .filter(pk__in=listing_ids)
+            .order_by("pk")
+        }
+        locked_attempts = list(stale.select_for_update().order_by("listing_id", "pk"))
+        changed_listings = set()
+        for attempt in locked_attempts:
+            if (
+                attempt.status != SocialPublicationAttempt.Status.PENDING
+                or attempt.updated_at >= cutoff
+            ):
+                continue
+            listing_obj = locked_listings.get(attempt.listing_id)
+            if listing_obj is None:
+                continue
+            attempt.status = SocialPublicationAttempt.Status.UNCERTAIN
+            attempt.error_code = "worker_timeout"
+            attempt.save(update_fields=["status", "error_code", "updated_at"])
+            reconciled += 1
+            advert = getattr(listing_obj, "advert", None)
+            if advert is not None and advert.version_number == attempt.advert_version_number:
+                changed_listings.add(listing_obj.pk)
+
+        for listing_id in changed_listings:
+            listing_obj = locked_listings[listing_id]
+            listing_obj.status = OpenPlotListing.Status.FAILED
+            listing_obj.save(update_fields=["status", "updated_at"])
+    return reconciled
 
 
 def broker_login(request):
@@ -99,6 +154,7 @@ def invalidate_advert(listing):
 
 @login_required
 def dashboard(request):
+    reconcile_stale_social_attempts(broker=request.user)
     listings = OpenPlotListing.objects.filter(broker=request.user).order_by("-updated_at")
     return render(request, "properties/dashboard.html", {"listings": listings})
 
@@ -618,22 +674,119 @@ def private_poster(request, public_id):
 @login_required
 def advert_preview(request, public_id):
     plot = owned_plot(request, public_id)
+    reconcile_stale_social_attempts(listing=plot)
+    plot.refresh_from_db(fields=["status"])
+    social_mode = bool(getattr(settings, "META_MULTI_TENANT_ENABLED", False))
+    has_social_attempts = SocialPublicationAttempt.objects.filter(listing=plot).exists()
+    callback = urlsplit(getattr(settings, "META_REDIRECT_URI", ""))
+    social_ready = bool(
+        social_mode
+        and settings.META_APP_ID
+        and settings.META_APP_SECRET
+        and settings.META_TOKEN_ENCRYPTION_KEY
+        and callback.scheme == "https"
+        and callback.netloc
+        and not callback.username
+        and not callback.password
+        and settings.AUTOMATION_HMAC_SECRET
+    )
     if plot.status not in {
         OpenPlotListing.Status.APPROVED,
         OpenPlotListing.Status.PUBLISHING,
         OpenPlotListing.Status.PUBLISHED,
     } and not (
-        plot.status == OpenPlotListing.Status.FAILED and plot.publication_request_id is not None
+        plot.status == OpenPlotListing.Status.FAILED
+        and (plot.publication_request_id is not None or has_social_attempts)
     ):
         return redirect("review-details", public_id=public_id)
+    attempts = (
+        list(
+            SocialPublicationAttempt.objects.filter(
+                listing=plot, advert_version_number=plot.advert.version_number
+            )
+            .select_related("social_connection")
+            .order_by("-created_at", "-pk")
+        )
+        if hasattr(plot, "advert")
+        else []
+    )
+    make_published = set((plot.publication_results or {}).keys())
+    publish_options = []
+    connected_pages = SocialAccountConnection.objects.filter(
+        owner=request.user, status=SocialAccountConnection.Status.CONNECTED
+    ).order_by("page_name", "pk")
+    if plot.status == OpenPlotListing.Status.FAILED:
+        retryable = {
+            attempt.pk
+            for attempt in attempts
+            if attempt.status == SocialPublicationAttempt.Status.FAILED
+            and (
+                attempt.error_code in {"token_invalid", "token_expired", "not_attempted"}
+                or (
+                    attempt.error_code == "media_not_ready"
+                    and attempt.platform == SocialPublicationAttempt.Platform.INSTAGRAM
+                    and attempt.instagram_container_id
+                )
+            )
+        }
+        for attempt in attempts:
+            if (
+                attempt.pk in retryable
+                and attempt.social_connection.status == SocialAccountConnection.Status.CONNECTED
+                and attempt.platform not in make_published
+                and (
+                    attempt.error_code in {"not_attempted", "media_not_ready"}
+                    or (
+                        attempt.error_code in {"token_invalid", "token_expired"}
+                        and attempt.social_connection.updated_at > attempt.updated_at
+                    )
+                )
+            ):
+                publish_options.append(
+                    {
+                        "connection": attempt.social_connection,
+                        "platforms": [
+                            {
+                                "value": attempt.platform,
+                                "label": attempt.get_platform_display(),
+                            }
+                        ],
+                    }
+                )
+    elif plot.status in {OpenPlotListing.Status.APPROVED, OpenPlotListing.Status.PUBLISHED}:
+        for connection in connected_pages:
+            prior = {
+                attempt.platform
+                for attempt in attempts
+                if attempt.social_connection_id == connection.pk
+            }
+            choices = []
+            if "facebook" not in prior | make_published:
+                choices.append({"value": "facebook", "label": "Facebook"})
+            if connection.instagram_account_id and "instagram" not in prior | make_published:
+                choices.append({"value": "instagram", "label": "Instagram"})
+            if len(choices) == 2:
+                choices.append({"value": "all", "label": "Facebook and Instagram"})
+            if choices:
+                publish_options.append({"connection": connection, "platforms": choices})
     return render(
         request,
         "properties/advert_preview.html" if hasattr(plot, "advert") else "properties/preview.html",
         {
             "plot": plot,
             "publication_enabled": (
-                settings.MAKE_PUBLICATION_ENABLED and bool(settings.MAKE_PUBLICATION_WEBHOOK_URL)
+                not social_mode
+                and settings.MAKE_PUBLICATION_ENABLED
+                and bool(settings.MAKE_PUBLICATION_WEBHOOK_URL)
             ),
+            "social_publication_enabled": social_ready,
+            "social_publication_unavailable": social_mode and not social_ready,
+            "social_publish_options": publish_options,
+            "social_connections_need_attention": SocialAccountConnection.objects.filter(
+                owner=request.user
+            ).exclude(status=SocialAccountConnection.Status.CONNECTED),
+            "social_publication_attempts": attempts,
+            "can_social_publish": bool(publish_options),
             "publication_form": PublicationForm(
                 initial={"platform": "all" if plot.publication_results else "facebook"}
             ),
@@ -645,6 +798,8 @@ def advert_preview(request, public_id):
 @require_POST
 def publish_plot(request, public_id):
     plot = owned_plot(request, public_id)
+    if getattr(settings, "META_MULTI_TENANT_ENABLED", False):
+        return HttpResponseBadRequest("Use your connected Meta Page to publish this advert.")
     if not settings.MAKE_PUBLICATION_ENABLED:
         return HttpResponseBadRequest("Facebook posting is not ready yet.")
     if not settings.MAKE_PUBLICATION_WEBHOOK_URL:
@@ -732,10 +887,13 @@ def publish_plot(request, public_id):
 @login_required
 def published_result(request, public_id):
     plot = owned_plot(request, public_id)
+    reconcile_stale_social_attempts(listing=plot)
+    plot.refresh_from_db(fields=["status"])
+    social_attempts = SocialPublicationAttempt.objects.filter(listing=plot)
     if plot.status not in {
         OpenPlotListing.Status.PUBLISHED,
         OpenPlotListing.Status.PUBLISHING,
-    }:
+    } and not (plot.status == OpenPlotListing.Status.FAILED and social_attempts.exists()):
         return redirect("advert-preview", public_id=public_id)
     return render(
         request,
@@ -743,6 +901,12 @@ def published_result(request, public_id):
         {
             "plot": plot,
             "publication_status_url": reverse("publication-status", args=[plot.public_id]),
+            "social_publication_attempts": social_attempts.select_related(
+                "social_connection"
+            ).order_by("-created_at", "-pk"),
+            "social_connections_need_attention": SocialAccountConnection.objects.filter(
+                owner=request.user
+            ).exclude(status=SocialAccountConnection.Status.CONNECTED),
         },
     )
 
@@ -751,6 +915,8 @@ def published_result(request, public_id):
 @require_GET
 def publication_status(request, public_id):
     plot = owned_plot(request, public_id)
+    reconcile_stale_social_attempts(listing=plot)
+    plot.refresh_from_db(fields=["status"])
     job = (
         AutomationJob.objects.filter(listing=plot, kind=AutomationJob.Kind.PUBLICATION)
         .order_by("-requested_at")
