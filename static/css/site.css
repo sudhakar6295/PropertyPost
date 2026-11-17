@@ -51,4 +51,17 @@ a { text-underline-offset:3px; }
 .notice-strip { background:#fbf4e8; border:1px solid #ebddc3; border-radius:.9rem; padding:1rem 1.2rem; }
 :focus-visible { outline:3px solid #bd8d31!important; outline-offset:3px; }
 @media(max-width:767.98px) { .login-aside { min-height:auto; border-radius:1.2rem 1.2rem 0 0; } .listing-actions .btn { flex:1 1 auto; } .step-divider { display:none; } .step-row { gap:.35rem; } .page-shell { padding-top:1.8rem; } .photo-tile .btn { width:100%; } }
+@media(max-width:575.98px) {
+  .container { --bs-gutter-x:1.25rem; }
+  .page-shell { padding-top:1.25rem; padding-bottom:2.5rem; }
+  .page-title { font-size:clamp(1.65rem,7vw,2.2rem); }
+  .card-body { padding:1.25rem!important; }
+  .step-item { font-size:.72rem; }
+  .detail-list dd,.caption-text,.meta-chip { overflow-wrap:anywhere; }
+  .listing-actions { display:grid!important; grid-template-columns:minmax(0,1fr); }
+  .listing-actions .btn { width:100%; }
+  .photo-tile .d-flex .btn { min-width:0; flex:1; }
+  .phone-entry .form-select,.phone-entry .form-control { width:100%; }
+  .page-shell > .row .d-flex.flex-wrap.gap-2 > .btn { flex:1 1 100%; }
+}
 @media(prefers-reduced-motion:reduce) { .listing-card { transition:none; } .listing-card:hover { transform:none; } }

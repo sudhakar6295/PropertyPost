@@ -3,16 +3,17 @@
 {% block content %}
 <div class="container page-shell"><div class="row justify-content-center"><div class="col-12 col-xl-10">
   <p class="eyebrow">READY FOR YOUR REVIEW</p><h1 class="page-title display-6">Review your advert</h1>
-  <p class="page-intro mb-4">Read the text, make changes if needed, then approve it for posting.</p>
+  <p class="page-intro mb-4">Check the poster and words. You can edit the words here. Approving does not post it yet.</p>
   <div class="row g-4">
     <div class="col-lg-6"><div class="poster-frame"><img src="{% url 'private-poster' plot.public_id %}" alt="Poster for {{ plot.title }}"></div></div>
     <div class="col-lg-6"><section class="card"><div class="card-body p-4">
       <span class="status-pill">PUBLIC</span><h2 class="section-heading mt-3">Shown in your advert</h2>
       <form method="post">{% csrf_token %}{{ advert_form.non_field_errors }}
         {% for field in advert_form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}
-        <div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary" name="intent" value="save" type="submit">Save changes</button><button class="btn btn-primary" name="intent" value="approve" type="submit">Approve and preview</button></div>
+        <p class="small text-secondary">When it looks right, approve it. You will choose where to post on the next page.</p>
+        <div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary" name="intent" value="save" type="submit">Save words</button><button class="btn btn-primary" name="intent" value="approve" type="submit">Looks good · Continue</button></div>
       </form>
-      <a class="btn btn-link px-0 mt-2" href="{% url 'generate-advert' plot.public_id %}">Make a different poster</a>
+      <a class="btn btn-link px-0 mt-2" href="{% url 'generate-advert' plot.public_id %}">Try another design or language</a>
     </div></section></div>
   </div>
   <section class="card private-card mt-4"><div class="card-body p-4"><h2 class="section-heading">Private notes—only visible to you</h2><p class="mb-0">{{ private.internal_notes|default:"No private notes" }}</p></div></section>

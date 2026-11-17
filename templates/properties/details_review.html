@@ -2,7 +2,7 @@
 {% block title %}Review plot details | PropertyPost{% endblock %}
 {% block content %}
 <div class="container page-shell"><div class="row justify-content-center"><div class="col-12 col-xl-10">
-  <p class="eyebrow">BEFORE YOU CREATE</p><h1 class="page-title display-6">Review plot details</h1><p class="page-intro">Check the information buyers will see. Your owner details stay private.</p>
+  <p class="eyebrow">STEP 3 OF 4 · CHECK DETAILS</p><h1 class="page-title display-6">Check your plot</h1><p class="page-intro">Please check the price and phone number carefully. Buyers will see the first card. Owner details stay private.</p>
   <div class="step-row" aria-label="Advert steps"><span class="step-item">1 · Plot details</span><span class="step-divider">›</span><span class="step-item">2 · Photos</span><span class="step-divider">›</span><span class="step-item current">3 · Review</span><span class="step-divider">›</span><span class="step-item">4 · Advert</span></div>
   <div class="row g-4">
     <div class="col-lg-7"><section class="card h-100"><div class="card-body p-4 p-md-5">
@@ -31,6 +31,6 @@
       </dl>
     </div></section></div>
   </div>
-  <div class="d-flex flex-wrap gap-2 mt-4"><a class="btn btn-outline-secondary" href="{% url 'edit-plot' plot.public_id %}">Edit details</a><a class="btn btn-outline-secondary" href="{% url 'upload-photos' plot.public_id %}">Edit photos</a><a class="btn btn-primary" href="{% url 'generate-advert' plot.public_id %}">Make advert →</a></div>
+  <div class="d-flex flex-wrap gap-2 mt-4"><a class="btn btn-outline-secondary" href="{% url 'edit-plot' plot.public_id %}">Correct details</a><a class="btn btn-outline-secondary" href="{% url 'upload-photos' plot.public_id %}">Change photos</a><a class="btn btn-primary" href="{% url 'generate-advert' plot.public_id %}">Details are correct · Make advert →</a></div>
 </div></div></div>
 {% endblock %}

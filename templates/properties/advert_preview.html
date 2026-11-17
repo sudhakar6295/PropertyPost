@@ -3,7 +3,7 @@
 {% block content %}
 <div class="container page-shell"><div class="row justify-content-center"><div class="col-12 col-xl-10">
   <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
-    <div><p class="eyebrow">APPROVED ADVERT</p><h1 class="page-title display-6">Advert preview</h1><p class="page-intro mb-0">This poster and text are saved for your plot.</p></div>
+    <div><p class="eyebrow">READY TO POST</p><h1 class="page-title display-6">Your finished advert</h1><p class="page-intro mb-0">Check the poster and text once more before posting.</p></div>
     <div class="d-flex gap-2"><a class="btn btn-outline-secondary btn-sm" href="{% url 'advert-history' plot.public_id %}">Advert history</a>{% if plot.status == 'published' %}<form method="post" action="{% url 'revise-published-advert' plot.public_id %}">{% csrf_token %}<button class="btn btn-outline-primary btn-sm" type="submit">Edit this advert</button></form>{% endif %}</div>
   </div>
   <div class="row g-4">
@@ -11,11 +11,12 @@
     <div class="col-lg-6"><section class="card h-100"><div class="card-body p-4 p-md-5">
       <h2 class="h3 fw-bold">{{ plot.advert.headline }}</h2><p class="caption-text">{{ plot.advert.caption }}</p>
       <p class="text-primary">{% for tag in plot.advert.hashtags %}{{ tag }} {% endfor %}</p>
-      {% if plot.publication_results %}<div class="alert alert-success"><strong>Already posted:</strong> {% for platform, post_id in plot.publication_results.items %}{{ platform|title }} ({{ post_id }}) {% endfor %}</div>{% endif %}
+      {% if plot.publication_results %}<div class="alert alert-success"><strong>Already posted:</strong> {% for platform, post_id in plot.publication_results.items %}{{ platform|title }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
       {% if publication_enabled and plot.status == 'approved' or publication_enabled and plot.status == 'failed' and plot.publication_request_id %}
       <form method="post" action="{% url 'publish-plot' plot.public_id %}" class="mt-4">{% csrf_token %}
         <label class="form-label" for="{{ publication_form.platform.id_for_label }}">{{ publication_form.platform.label }}</label>{{ publication_form.platform }}
-        <button class="btn btn-primary mt-3" type="submit">{% if plot.status == 'failed' %}Try posting again{% else %}Continue to publish{% endif %}</button>
+        <p class="small text-secondary mt-2 mb-0">Clicking the button sends this poster and text to the selected account.</p>
+        <button class="btn btn-primary mt-3" type="submit">{% if plot.status == 'failed' %}Try posting again{% else %}Post this advert{% endif %}</button>
       </form>
       {% elif plot.status == 'publishing' %}<p class="alert alert-info" role="status">Your post is being processed. Come back in a moment to see the result.</p>
       {% elif plot.status == 'published' %}<p class="alert alert-success">This advert has been published.</p>

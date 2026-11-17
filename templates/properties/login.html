@@ -7,21 +7,21 @@
       <div class="card login-card">
         <div class="row g-0">
           <div class="col-md-5 login-aside d-flex flex-column justify-content-between p-4 p-lg-5">
-            <div><p class="eyebrow text-warning">PROPERTYPOST</p><h1 class="display-6 fw-bold lh-sm mb-3">Every plot has a story. Make yours stand out.</h1><p class="mb-0">Keep your listings, photos, adverts and posting results together in one place.</p></div>
-            <p class="small mb-0 mt-4">Your private notes stay visible only to you.</p>
+            <div><p class="eyebrow text-warning">PROPERTYPOST</p><h1 class="display-6 fw-bold lh-sm mb-3">Your plots and adverts in one place</h1><p class="mb-0">Add plot details, upload photos, make an advert, and check your posts.</p></div>
+            <p class="small mb-0 mt-4">Owner details stay private to your account.</p>
           </div>
           <div class="col-md-7">
             <div class="p-4 p-md-5">
               <p class="eyebrow">BROKER SIGN IN</p>
               <h2 class="page-title h2">Welcome back</h2>
-              <p class="page-intro mb-4">Sign in to manage your plot adverts.</p>
+              <p class="page-intro mb-4">Enter your username and password to continue.</p>
               {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
               <form method="post">{% csrf_token %}
                 <div class="mb-3"><label class="form-label" for="username">Username</label><input class="form-control" id="username" name="username" autocomplete="username" required autofocus></div>
                 <div class="mb-4"><label class="form-label" for="password">Password</label><input class="form-control" id="password" name="password" type="password" autocomplete="current-password" required></div>
                 <button class="btn btn-primary w-100" type="submit">Sign in</button>
               </form>
-              <p class="small text-secondary mt-4 mb-0">Need an account? Ask your PropertyPost administrator.</p>
+              <p class="small text-secondary mt-4 mb-0">Need help signing in? Ask the person who created your account.</p>
             </div>
           </div>
         </div>
